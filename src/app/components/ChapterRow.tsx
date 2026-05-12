@@ -2,32 +2,32 @@ import type { JSX } from 'react'
 import { cn } from '@/app/lib/utils'
 import type { ChapterCritique, TourChapter } from '@/lib/api'
 import type { ChapterNav } from '@/app/hooks/useChapterNav'
-import { CritiqueCallout } from '@/app/components/CritiqueCallout'
 
 interface Props {
   chapter: TourChapter
   chapterIdx: number
   nav: ChapterNav
-  critiqueOpen: boolean
-  onToggleCritique: () => void
+  expanded: boolean
+  onToggle: () => void
 }
 
-export function ChapterRow({ chapter, chapterIdx, nav, critiqueOpen, onToggleCritique }: Props): JSX.Element {
-  const isActiveChapter = nav.current?.chapterIdx === chapterIdx
+export function ChapterRow({ chapter, chapterIdx, nav, expanded, onToggle }: Props): JSX.Element {
   return (
     <li className="border-border border-b last:border-b-0">
-      <header className="flex items-center justify-between px-4 py-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="hover:bg-surface-hover/40 flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors"
+      >
         <div className="flex min-w-0 items-baseline gap-2">
+          <span aria-hidden className={cn('text-text-muted text-[10px] transition-transform', expanded ? 'rotate-90' : '')}>▸</span>
           <span className="text-text-muted text-[10px] tracking-wider uppercase">Ch {chapterIdx + 1}</span>
           <span className="text-text-primary truncate text-sm font-medium">{chapter.title}</span>
           {chapter.summary && <span className="text-text-muted truncate text-xs">— {chapter.summary}</span>}
         </div>
-        {chapter.critique && (
-          <CritiqueBadge critique={chapter.critique} active={critiqueOpen} onClick={onToggleCritique} />
-        )}
-      </header>
-      {isActiveChapter && <StepList chapter={chapter} chapterIdx={chapterIdx} nav={nav} />}
-      {critiqueOpen && chapter.critique && <CritiqueCallout critique={chapter.critique} />}
+        {chapter.critique && <CritiqueBadge critique={chapter.critique} />}
+      </button>
+      {expanded && <StepList chapter={chapter} chapterIdx={chapterIdx} nav={nav} />}
     </li>
   )
 }
@@ -62,19 +62,11 @@ function StepList({ chapter, chapterIdx, nav }: { chapter: TourChapter; chapterI
   )
 }
 
-function CritiqueBadge({ critique, active, onClick }: { critique: ChapterCritique; active: boolean; onClick: () => void }): JSX.Element {
+function CritiqueBadge({ critique }: { critique: ChapterCritique }): JSX.Element {
+  if (critique.issues.length === 0 && critique.suggestions.length === 0) return <></>
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'shrink-0 rounded-sm px-2 py-0.5 text-[11px] transition-colors',
-        active
-          ? 'bg-surface-hover text-text-primary'
-          : 'bg-surface text-text-secondary hover:text-text-primary',
-      )}
-    >
+    <span className="bg-surface text-text-secondary shrink-0 rounded-sm px-2 py-0.5 text-[11px]">
       <span aria-hidden>🚩</span> {critique.issues.length} · <span aria-hidden>💡</span> {critique.suggestions.length}
-    </button>
+    </span>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { TourChapter } from '@/lib/api'
 import type { ChapterNav } from '@/app/hooks/useChapterNav'
 import { ChapterRow } from '@/app/components/ChapterRow'
@@ -10,7 +10,24 @@ interface Props {
 }
 
 export function ChapterStepper({ chapters, nav, onRegenerate }: Props): JSX.Element {
-  const [openCritique, setOpenCritique] = useState<number | null>(null)
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set([0]))
+  const activeChapter = nav.current?.chapterIdx
+
+  // Auto-expand whichever chapter the user navigates into.
+  useEffect(() => {
+    if (activeChapter == null) return
+    setExpanded((prev) => prev.has(activeChapter) ? prev : new Set([...prev, activeChapter]))
+  }, [activeChapter])
+
+  const toggle = (idx: number): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
+
   return (
     <div className="border-border bg-bg flex flex-col border-t">
       <ul className="max-h-64 overflow-y-auto">
@@ -20,8 +37,8 @@ export function ChapterStepper({ chapters, nav, onRegenerate }: Props): JSX.Elem
             chapter={chapter}
             chapterIdx={i}
             nav={nav}
-            critiqueOpen={openCritique === i}
-            onToggleCritique={() => setOpenCritique(openCritique === i ? null : i)}
+            expanded={expanded.has(i)}
+            onToggle={() => toggle(i)}
           />
         ))}
       </ul>

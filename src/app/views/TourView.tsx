@@ -66,7 +66,7 @@ function ReadyView({ repo, tour, onRegenerate, onBack }: ReadyProps): JSX.Elemen
       <div className="bg-border grid min-h-0 flex-1 grid-cols-[1fr_2fr_1fr] gap-px">
         <Section title="Docs">
           {nav.current
-            ? <DocsPane step={nav.current.step} />
+            ? <DocsPane step={nav.current.step} chapter={nav.current.chapter} />
             : <CenterMessage>No step selected.</CenterMessage>}
         </Section>
         <Section title="Code / Diagram">

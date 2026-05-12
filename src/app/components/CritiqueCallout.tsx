@@ -8,12 +8,13 @@ interface Props {
 
 /** Expanded review-feedback card shown below an active chapter when its badge is clicked. */
 export function CritiqueCallout({ critique }: Props): JSX.Element {
+  if (critique.issues.length === 0 && critique.suggestions.length === 0) return <></>
   return (
-    <div className="border-border bg-surface mx-4 mb-3 space-y-2 rounded-md border p-3">
+    <section className="border-border bg-surface mt-5 space-y-2 rounded-md border p-3">
       <p className="text-text-secondary text-[10px] tracking-wider uppercase">Critique</p>
       {critique.issues.map((issue, i) => <IssueRow key={`i-${i}`} issue={issue} />)}
       {critique.suggestions.map((s, i) => <SuggestionRow key={`s-${i}`} suggestion={s} />)}
-    </div>
+    </section>
   )
 }
 

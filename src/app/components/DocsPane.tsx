@@ -1,16 +1,19 @@
 import { marked } from 'marked'
 import { useMemo, type JSX } from 'react'
-import type { TourStep } from '@/lib/api'
+import { CritiqueCallout } from '@/app/components/CritiqueCallout'
+import type { TourChapter, TourStep } from '@/lib/api'
 
 interface Props {
   step: TourStep
+  chapter: TourChapter
 }
 
 /**
- * Renders a step's narration. Body markdown is produced by our own zod-validated
- * prompt; we set `dangerouslySetInnerHTML` because the source is trusted.
+ * Renders a step's narration plus its chapter critique (issues + suggestions)
+ * below the body. The body is markdown produced by our zod-validated prompt;
+ * we set dangerouslySetInnerHTML because the source is trusted.
  */
-export function DocsPane({ step }: Props): JSX.Element {
+export function DocsPane({ step, chapter }: Props): JSX.Element {
   const html = useMemo(() => marked.parse(step.body, { async: false }), [step.body])
   return (
     <article className="markdown h-full overflow-y-auto p-5">
@@ -19,6 +22,7 @@ export function DocsPane({ step }: Props): JSX.Element {
         className="text-text-secondary text-sm leading-relaxed"
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      {chapter.critique && <CritiqueCallout critique={chapter.critique} />}
     </article>
   )
 }
