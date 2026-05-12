@@ -1,7 +1,12 @@
 import type Database from 'better-sqlite3'
 import { Service } from '@/main/service'
 
-type Params = unknown[] | Record<string, unknown>
+/**
+ * `object` (not `Record<string, unknown>`) for the named-param case so that
+ * typed interfaces — e.g. `CloneRecord { repo: string, ... }` — satisfy it
+ * without an explicit index signature. better-sqlite3 just iterates keys.
+ */
+type Params = unknown[] | object
 
 /** Queries slower than this get a warn-level log line. Tune per profiling. */
 const SLOW_QUERY_MS = 50

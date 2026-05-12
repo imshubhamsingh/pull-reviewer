@@ -41,11 +41,16 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(IPC.GetApiPort, () => apiServer?.port ?? 0)
 
+  // Best-effort cleanup of worktrees left behind by crashed prior runs.
+  services.clones.sweepOrphans().catch((err: Error) => {
+    log.warn('Worktree sweep failed', { err: err.message })
+  })
+
   await createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow()
+      createWindow()
     }
   })
 }).catch((err: Error) => {
@@ -54,7 +59,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  void apiServer?.stop()
+  apiServer?.stop()
   services?.db.close()
   if (process.platform !== 'darwin') app.quit()
 })

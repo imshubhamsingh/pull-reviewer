@@ -1,49 +1,40 @@
-import { z } from 'zod'
 import { Service } from '@/main/service'
+import { TourSchema, type Tour } from '@/main/tour/tour-schema'
 
-const TourStepSchema = z.object({
-  id: z.string().min(1),
-  panel: z.enum(['docs', 'code', 'code-map']),
-  file: z.string().optional(),
-  side: z.enum(['before', 'after', 'diff']).optional(),
-  lineStart: z.number().int().nonnegative().optional(),
-  lineEnd: z.number().int().nonnegative().optional(),
-  title: z.string().min(1).max(120),
-  body: z.string().min(1),
-})
+export type { Tour, TourChapter, TourStep } from '@/main/tour/tour-schema'
 
-const TourSchema = z.array(TourStepSchema).min(1).max(20)
-
-export type TourStep = z.infer<typeof TourStepSchema>
-
+/**
+ * Unwraps the CLI's output envelope and zod-validates the result against the
+ * chapters-shaped Tour schema. Two unwrap steps tolerate model output that:
+ *  - is wrapped in the `claude --output-format json` envelope `{ result: "..." }`
+ *  - is wrapped in a ```json``` fence the model emitted despite instructions
+ */
 export class TourParser extends Service {
-  parse(raw: string): TourStep[] {
+  parse(raw: string): Tour {
     this.logger.info('Parsing tour output', { bytes: raw.length })
-
-    let text = raw.trim()
-
-    // Unwrap `claude --output-format json` envelope: { result: "..." }
-    try {
-      const envelope = JSON.parse(text) as unknown
-      if (
-        typeof envelope === 'object' &&
-        envelope !== null &&
-        'result' in envelope &&
-        typeof (envelope as { result: unknown }).result === 'string'
-      ) {
-        text = (envelope as { result: string }).result
-      }
-    } catch {
-      // not a JSON envelope; treat as raw model output
-    }
-
-    // Strip ``` fences if the model wrapped despite instructions
-    text = text
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```\s*$/, '')
-      .trim()
-
+    const text = stripFences(unwrapEnvelope(raw.trim()))
     const parsed: unknown = JSON.parse(text)
     return TourSchema.parse(parsed)
   }
+}
+
+function unwrapEnvelope(text: string): string {
+  try {
+    const envelope = JSON.parse(text) as unknown
+    if (
+      typeof envelope === 'object' &&
+      envelope !== null &&
+      'result' in envelope &&
+      typeof (envelope as { result: unknown }).result === 'string'
+    ) {
+      return (envelope as { result: string }).result
+    }
+  } catch {
+    // not a JSON envelope; treat as raw model output
+  }
+  return text
+}
+
+function stripFences(text: string): string {
+  return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 }

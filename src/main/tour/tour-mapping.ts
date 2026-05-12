@@ -1,13 +1,13 @@
 import type { Provider } from '@/main/tour/cli-runner.service'
 import type { PrContext } from '@/main/tour/pr-context.collector'
-import type { TourStep } from '@/main/tour/tour.parser'
+import type { Tour } from '@/main/tour/tour-schema'
 import { prId, type TourRecord } from '@/main/tour/tour.store'
 import type { TourResult } from '@/main/tour/tour-source'
 
 /** Build a fully-formed record for a freshly-generated tour. */
 export function recordFromGeneration(args: {
   ctx: PrContext
-  steps: TourStep[]
+  chapters: Tour
   previousHeadRefOid: string | null
   provider: Provider
   model: string
@@ -18,9 +18,9 @@ export function recordFromGeneration(args: {
     repo: args.ctx.repo,
     prNumber: args.ctx.number,
     headRefOid: args.ctx.headRefOid,
-    baseRefOid: null,             // populated in Phase 3 after PrContextCollector exposes it
+    baseRefOid: null,             // populated when PrContextCollector exposes baseRefOid (later phase)
     previousHeadRefOid: args.previousHeadRefOid,
-    steps: args.steps,
+    chapters: args.chapters,
     files: args.ctx.files,
     generatedAt: now,
     lastCheckedAt: now,
@@ -40,7 +40,7 @@ export function resultFromRecord(rec: TourRecord, currentHeadRefOid: string): To
     previousHeadRefOid: rec.previousHeadRefOid,
     generatedAt: rec.generatedAt,
     currentHeadRefOid,
-    steps: rec.steps,
+    chapters: rec.chapters,
     files: rec.files,
     provider: rec.provider,
     model: rec.model,

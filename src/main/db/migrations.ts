@@ -1,6 +1,7 @@
 import type { Logger } from '@/lib/logger'
 import type { Db } from '@/main/db/db'
 import * as m20260512123142Initial from '@/main/db/migrations/20260512123142-initial'
+import * as m20260512191137ChaptersAndDiagrams from '@/main/db/migrations/20260512191137-chapters-and-diagrams'
 
 interface Migration {
   id: string
@@ -11,7 +12,10 @@ interface Migration {
  * Registered migrations. Filenames already carry timestamps so this list stays
  * naturally chronological — we sort by `id` defensively on every run regardless.
  */
-const MIGRATIONS: Migration[] = [m20260512123142Initial]
+const MIGRATIONS: Migration[] = [
+  m20260512123142Initial,
+  m20260512191137ChaptersAndDiagrams,
+]
 
 export function applyMigrations(db: Db, logger: Logger): void {
   db.exec(/* sql */ `

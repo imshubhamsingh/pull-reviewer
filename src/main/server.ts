@@ -15,6 +15,7 @@ export function startApiServer(services: Services): Promise<RunningServer> {
   app.get('/health', (c) => c.json({ ok: true }))
   app.route('/api/pull-requests', services.routers.pullRequests.routes())
   app.route('/api/tours', services.routers.tours.routes())
+  app.route('/api/files', services.routers.files.routes())
 
   return new Promise((resolve) => {
     const server: ServerType = serve({ fetch: app.fetch, port: 0 }, (info) => {

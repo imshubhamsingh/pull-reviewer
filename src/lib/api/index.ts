@@ -26,15 +26,54 @@ export interface PullRequestSummary {
   updatedAt: string
 }
 
-export interface TourStep {
-  id: string
-  panel: 'docs' | 'code' | 'code-map'
-  file?: string
+export interface CodePointer {
+  file: string
   side?: 'before' | 'after' | 'diff'
   lineStart?: number
   lineEnd?: number
+  /** Single line to center/scroll to — usually the call or decision the step is about. Defaults to lineStart. */
+  focusLine?: number
+  /** Extra lines of buffer above/below the window. Renderer hint; defaults to 2. */
+  contextLines?: number
+}
+
+export interface Diagram {
+  kind: 'sequence' | 'flowchart' | 'er' | 'class' | 'fileGraph'
+  mermaid: string
+}
+
+export interface TourStep {
+  id: string
+  panel: 'docs' | 'code' | 'code-map' | 'diagram'
   title: string
   body: string
+  code?: CodePointer
+  references?: CodePointer[]
+  diagram?: Diagram
+}
+
+export interface CritiqueIssue {
+  severity: 'minor' | 'major' | 'blocker'
+  body: string
+  code?: CodePointer
+}
+
+export interface CritiqueSuggestion {
+  body: string
+  code?: CodePointer
+}
+
+export interface ChapterCritique {
+  issues: CritiqueIssue[]
+  suggestions: CritiqueSuggestion[]
+}
+
+export interface TourChapter {
+  id: string
+  title: string
+  summary?: string
+  critique?: ChapterCritique
+  steps: TourStep[]
 }
 
 export interface PrFile {
@@ -52,10 +91,21 @@ export interface TourResult {
   generatedAt: string
   /** Live PR head sha at the time of this response. If !== headRefOid, the tour is stale. */
   currentHeadRefOid: string
-  steps: TourStep[]
+  chapters: TourChapter[]
   files: PrFile[]
   provider: string
   model: string
+}
+
+export interface FileSnapshot {
+  repo: string
+  sha: string
+  path: string
+  content: string | null
+  encoding: 'utf8' | 'base64' | 'omitted'
+  size: number
+  fetchedAt: string
+  accessedAt: string
 }
 
 export const api = {
@@ -75,6 +125,11 @@ export const api = {
       http.post<TourResult>(
         `/api/tours/${repo}/${prNumber}/generate${opts.force ? '?force=true' : ''}`,
       ),
+  },
+  files: {
+    /** Read a file at a given sha. Read-through cache; fast on repeat reads. */
+    get: (repo: string, sha: string, path: string) =>
+      http.get<FileSnapshot>(`/api/files/${repo}/${sha}/${encodeURI(path)}`),
   },
 }
 

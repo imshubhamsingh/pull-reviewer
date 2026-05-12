@@ -3,6 +3,15 @@ import { DatabaseService } from '@/main/db/database.service'
 import { GitHubCliService } from '@/main/github/github-cli.service'
 import { PullRequestRouter } from '@/main/github/pull-request.router'
 import { PullRequestService } from '@/main/github/pull-request.service'
+import { FileRouter } from '@/main/files/file.router'
+import { FileSnapshotService } from '@/main/files/file-snapshot.service'
+import { FileSnapshotStore } from '@/main/files/file-snapshot.store'
+import { BlobReader } from '@/main/git/blob-reader'
+import { CloneRegistry } from '@/main/git/clone-registry'
+import { CloneStore } from '@/main/git/clone.store'
+import { GitCloneManager } from '@/main/git/clone.manager'
+import { GitRunner } from '@/main/git/git-runner'
+import { WorktreeManager } from '@/main/git/worktree-manager'
 import { CachedTourSource } from '@/main/tour/cached-tour-source'
 import { CliRunnerService } from '@/main/tour/cli-runner.service'
 import { GeneratedTourSource } from '@/main/tour/generated-tour-source'
@@ -21,9 +30,12 @@ export interface Services {
   github: GitHubCliService
   pullRequests: PullRequestService
   tours: TourService
+  clones: GitCloneManager
+  files: FileSnapshotService
   routers: {
     pullRequests: PullRequestRouter
     tours: TourRouter
+    files: FileRouter
   }
 }
 
@@ -44,15 +56,28 @@ export function buildServices(): Services {
   const generatedSource = new GeneratedTourSource(collector, promptBuilder, cli, parser, tourStore, models)
   const tours = new TourService(cachedSource, generatedSource, tourStore)
 
+  const gitRunner = new GitRunner()
+  const cloneStore = new CloneStore(db.query)
+  const cloneRegistry = new CloneRegistry(gitRunner, cloneStore)
+  const blobReader = new BlobReader(gitRunner, cloneRegistry)
+  const worktrees = new WorktreeManager(gitRunner, cloneRegistry)
+  const clones = new GitCloneManager(cloneRegistry, blobReader, worktrees)
+
+  const fileSnapshotStore = new FileSnapshotStore(db.query)
+  const files = new FileSnapshotService(clones, fileSnapshotStore)
+
   return {
     db,
     auth,
     github,
     pullRequests,
     tours,
+    clones,
+    files,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),
       tours: new TourRouter(tours),
+      files: new FileRouter(files),
     },
   }
 }

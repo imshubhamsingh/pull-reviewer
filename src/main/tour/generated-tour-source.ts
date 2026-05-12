@@ -46,18 +46,19 @@ export class GeneratedTourSource extends Service implements TourSource {
       onProgress: opts.onProgress,
     })
 
-    const steps = this.parser.parse(raw)
+    const chapters = this.parser.parse(raw)
     const previous = this.store.get(opts.repo, opts.prNumber)
     const record = recordFromGeneration({
       ctx,
-      steps,
+      chapters,
       previousHeadRefOid: previous?.headRefOid ?? null,
       provider: settings.provider,
       model: settings.model,
     })
     this.store.upsert(record)
 
-    this.logger.info('Tour generated', { prNumber: opts.prNumber, stepCount: steps.length })
+    const stepCount = chapters.reduce((n, ch) => n + ch.steps.length, 0)
+    this.logger.info('Tour generated', { prNumber: opts.prNumber, chapterCount: chapters.length, stepCount })
     return resultFromRecord(record, ctx.headRefOid)
   }
 

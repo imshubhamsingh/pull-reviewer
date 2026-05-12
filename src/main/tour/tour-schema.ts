@@ -1,0 +1,94 @@
+import { z } from 'zod'
+
+/**
+ * The wire/storage shape of a generated tour. Defined as one cohesive set of
+ * zod schemas so the contract lives in one place — the parser uses it for
+ * validation; the store serializes its inferred types as JSON.
+ *
+ * Shape philosophy:
+ *  - `panel: 'docs' | 'code' | 'code-map' | 'diagram'` — narration / code / a
+ *    file-treemap / a Mermaid diagram. Each carries the fields its renderer
+ *    needs and nothing else.
+ *  - Chapters group steps so 25-step tours stay scannable.
+ *  - `critique` lives at the chapter level: it's "what's wrong / what could be
+ *    better" feedback the reviewer can promote to draft comments later.
+ */
+
+export const PANEL_KINDS = ['docs', 'code', 'code-map', 'diagram'] as const
+export const DIAGRAM_KINDS = ['sequence', 'flowchart', 'er', 'class', 'fileGraph'] as const
+export const CRITIQUE_SEVERITIES = ['minor', 'major', 'blocker'] as const
+export const CODE_SIDES = ['before', 'after', 'diff'] as const
+
+const CodePointerSchema = z.object({
+  file: z.string().min(1),
+  side: z.enum(CODE_SIDES).optional(),
+  lineStart: z.number().int().nonnegative().optional(),
+  lineEnd: z.number().int().nonnegative().optional(),
+  /** Single line the renderer should center / scroll to — usually the call or decision the step is about. Defaults to lineStart. */
+  focusLine: z.number().int().nonnegative().optional(),
+  /** Extra lines of buffer above/below the [lineStart, lineEnd] window. Renderer hint; defaults to 2. */
+  contextLines: z.number().int().nonnegative().max(20).optional(),
+})
+
+const DiagramSchema = z.object({
+  kind: z.enum(DIAGRAM_KINDS),
+  mermaid: z.string().min(1).max(20_000),
+})
+
+const TourStepSchema = z
+  .object({
+    id: z.string().min(1),
+    panel: z.enum(PANEL_KINDS),
+    title: z.string().min(1).max(120),
+    body: z.string().min(1),
+    code: CodePointerSchema.optional(),
+    references: z.array(CodePointerSchema).max(8).optional(),
+    diagram: DiagramSchema.optional(),
+  })
+  .refine((s) => s.panel !== 'code' || !!s.code, { message: '`code` panel requires `code`' })
+  .refine((s) => s.panel !== 'diagram' || !!s.diagram, { message: '`diagram` panel requires `diagram`' })
+
+const CritiqueIssueSchema = z.object({
+  severity: z.enum(CRITIQUE_SEVERITIES),
+  body: z.string().min(1).max(2_000),
+  code: CodePointerSchema.optional(),
+})
+
+const CritiqueSuggestionSchema = z.object({
+  body: z.string().min(1).max(2_000),
+  code: CodePointerSchema.optional(),
+})
+
+const ChapterCritiqueSchema = z.object({
+  issues: z.array(CritiqueIssueSchema).max(10),
+  suggestions: z.array(CritiqueSuggestionSchema).max(10),
+})
+
+const TourChapterSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1).max(80),
+  summary: z.string().max(200).optional(),
+  critique: ChapterCritiqueSchema.optional(),
+  steps: z.array(TourStepSchema).min(1).max(15),
+})
+
+/**
+ * Hard cap is 20 — soft cap lives in the prompt rules so the model can size
+ * the tour to the PR. Tiny PRs get 2-3 chapters; sprawling refactors can get
+ * 10-15. The 20 limit is defensive against pathological "one chapter per file".
+ */
+export const TourSchema = z.array(TourChapterSchema).min(1).max(20)
+
+export type PanelKind = (typeof PANEL_KINDS)[number]
+export type DiagramKind = (typeof DIAGRAM_KINDS)[number]
+export type CritiqueSeverity = (typeof CRITIQUE_SEVERITIES)[number]
+export type CodeSide = (typeof CODE_SIDES)[number]
+
+export type CodePointer = z.infer<typeof CodePointerSchema>
+export type Diagram = z.infer<typeof DiagramSchema>
+export type TourStep = z.infer<typeof TourStepSchema>
+export type CritiqueIssue = z.infer<typeof CritiqueIssueSchema>
+export type CritiqueSuggestion = z.infer<typeof CritiqueSuggestionSchema>
+export type ChapterCritique = z.infer<typeof ChapterCritiqueSchema>
+export type TourChapter = z.infer<typeof TourChapterSchema>
+export type Tour = z.infer<typeof TourSchema>

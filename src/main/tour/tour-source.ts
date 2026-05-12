@@ -1,6 +1,6 @@
 import type { Provider } from '@/main/tour/cli-runner.service'
 import type { PrFile } from '@/main/tour/pr-context.collector'
-import type { TourStep } from '@/main/tour/tour.parser'
+import type { Tour } from '@/main/tour/tour-schema'
 
 export interface GenerateTourOptions {
   prNumber: number
@@ -22,7 +22,7 @@ export interface TourResult {
   generatedAt: string
   /** Live PR head sha at the time this result was produced. If !== headRefOid, the tour is stale. */
   currentHeadRefOid: string
-  steps: TourStep[]
+  chapters: Tour
   files: PrFile[]
   provider: string
   model: string
