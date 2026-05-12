@@ -99,3 +99,9 @@
 }
 .shiki-block .shiki .line.line-hl    { background-color: hsl(270 50% 30% / 0.18); }
 .shiki-block .shiki .line.line-focus { background-color: hsl(270 80% 50% / 0.22); box-shadow: inset 2px 0 0 var(--color-text-brand); }
+
+/* Diagram pane: SVG renders at its natural viewBox size; useAutoFit + useZoomPan
+   apply CSS `zoom` on the wrapper so the user always sees the whole diagram by
+   default and can zoom in/out + drag to pan. */
+.diagram-svg                     { display: block; }
+.diagram-svg svg                 { display: block; }
