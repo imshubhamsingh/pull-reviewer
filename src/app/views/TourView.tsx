@@ -3,10 +3,11 @@ import type { JSX, ReactNode } from 'react'
 import { useTour } from '@/app/hooks/useTour'
 import { useChapterNav } from '@/app/hooks/useChapterNav'
 import { ChapterStepper } from '@/app/components/ChapterStepper'
+import { CodePane } from '@/app/components/CodePane'
 import { DocsPane } from '@/app/components/DocsPane'
 import { GeneratingPanel } from '@/app/components/GeneratingPanel'
 import { StaleBanner } from '@/app/components/StaleBanner'
-import type { TourResult } from '@/lib/api'
+import type { TourResult, TourStep } from '@/lib/api'
 
 interface Props {
   repo: string
@@ -24,7 +25,9 @@ export function TourView({ repo, prNumber, onBack }: Props): JSX.Element {
           .with({ kind: 'loading' }, () => <CenterMessage>Loading…</CenterMessage>)
           .with({ kind: 'generating' }, ({ events }) => <GeneratingPanel events={events} />)
           .with({ kind: 'error' }, ({ message }) => <CenterMessage tone="danger">{message}</CenterMessage>)
-          .with({ kind: 'ready' }, ({ tour }) => <ReadyView tour={tour} onRegenerate={regenerate} onBack={onBack} />)
+          .with({ kind: 'ready' }, ({ tour }) => (
+            <ReadyView repo={repo} tour={tour} onRegenerate={regenerate} onBack={onBack} />
+          ))
           .exhaustive()}
       </div>
     </div>
@@ -32,14 +35,19 @@ export function TourView({ repo, prNumber, onBack }: Props): JSX.Element {
 }
 
 interface ReadyProps {
+  repo: string
   tour: TourResult
   onRegenerate: () => void
   onBack: () => void
 }
 
-function ReadyView({ tour, onRegenerate, onBack }: ReadyProps): JSX.Element {
+function ReadyView({ repo, tour, onRegenerate, onBack }: ReadyProps): JSX.Element {
   const nav = useChapterNav(tour.chapters, { onRegenerate, onEscape: onBack })
   const isStale = tour.headRefOid !== tour.currentHeadRefOid
+  const jumpToStep = (stepId: string) => {
+    const idx = nav.flat.findIndex((f) => f.step.id === stepId)
+    if (idx >= 0) nav.goTo(idx)
+  }
   return (
     <div className="flex h-full flex-col">
       {isStale && (
@@ -58,7 +66,9 @@ function ReadyView({ tour, onRegenerate, onBack }: ReadyProps): JSX.Element {
             : <CenterMessage>No step selected.</CenterMessage>}
         </Section>
         <Section title="Code / Diagram">
-          <PlaceholderPane>Code &amp; diagram panes land in Phase 8 + 9.</PlaceholderPane>
+          {nav.current
+            ? renderCenter(nav.current.step, repo, tour, jumpToStep)
+            : <PlaceholderPane>No step.</PlaceholderPane>}
         </Section>
         <Section title="Map">
           <PlaceholderPane>File map lands in Phase 10.</PlaceholderPane>
@@ -67,6 +77,15 @@ function ReadyView({ tour, onRegenerate, onBack }: ReadyProps): JSX.Element {
       <ChapterStepper chapters={tour.chapters} nav={nav} onRegenerate={onRegenerate} />
     </div>
   )
+}
+
+function renderCenter(step: TourStep, repo: string, tour: TourResult, onJumpToStep: (id: string) => void): JSX.Element {
+  return match(step.panel)
+    .with('code', () => <CodePane repo={repo} tour={tour} step={step} onJumpToStep={onJumpToStep} />)
+    .with('diagram', () => <PlaceholderPane>Diagram pane lands in Phase 9.</PlaceholderPane>)
+    .with('code-map', () => <PlaceholderPane>Code map lands in Phase 10.</PlaceholderPane>)
+    .with('docs', () => <PlaceholderPane>This step is docs-only.</PlaceholderPane>)
+    .exhaustive()
 }
 
 function Header({ repo, prNumber, onBack }: { repo: string; prNumber: number; onBack: () => void }): JSX.Element {
