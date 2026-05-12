@@ -18,7 +18,10 @@ export function startApiServer(services: Services): Promise<RunningServer> {
   app.route('/api/files', services.routers.files.routes())
 
   return new Promise((resolve) => {
-    const server: ServerType = serve({ fetch: app.fetch, port: 0 }, (info) => {
+    // Bind to 127.0.0.1 explicitly. `localhost` can resolve to ::1 (IPv6) on
+    // macOS/Node 20+, which Chromium's fetch may not try, producing
+    // "Failed to fetch" in the renderer.
+    const server: ServerType = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' }, (info) => {
       log.info('API server listening', { port: info.port })
       resolve({
         port: info.port,

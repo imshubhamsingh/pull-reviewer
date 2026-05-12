@@ -11,7 +11,9 @@ declare global {
 let baseUrl: Promise<string> | undefined
 
 function getBaseUrl(): Promise<string> {
-  baseUrl ??= window.electron.getApiPort().then((port) => `http://localhost:${port}`)
+  // 127.0.0.1 (not `localhost`) to avoid IPv4/IPv6 resolution mismatch with
+  // the embedded Hono server, which binds to 127.0.0.1.
+  baseUrl ??= window.electron.getApiPort().then((port) => `http://127.0.0.1:${port}`)
   return baseUrl
 }
 
