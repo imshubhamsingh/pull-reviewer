@@ -23,31 +23,35 @@ export interface CliRunOptions {
   onEvent?: (event: CliEvent) => void
   /** Legacy raw-chunk callback, kept for non-streaming paths. */
   onProgress?: (chunk: string) => void
+  /**
+   * Optional override for `--allowedTools`. Defaults to the provider's tour
+   * preset (Claude → Read,Grep,Glob). Pass e.g. `['WebSearch','WebFetch']` for
+   * the Ask-AI flow where the model needs the public web instead of the repo.
+   */
+  allowedTools?: string[]
 }
 
 interface ProviderConfig {
   bin: string
-  args: (model: string) => string[]
+  defaultTools: string[]
+  args: (model: string, tools: string[]) => string[]
 }
 
-/**
- * Claude runs with `--allowedTools 'Read,Grep,Glob'` so the model can read
- * neighbouring code in the worktree (cross-file context, callers, types).
- * Codex stays single-shot for now — same `--sandbox read-only` posture.
- */
 const PROVIDERS: Record<Provider, ProviderConfig> = {
   claude: {
     bin: 'claude',
-    args: (model) => [
+    defaultTools: ['Read', 'Grep', 'Glob'],
+    args: (model, tools) => [
       '-p',
       '--output-format', 'stream-json',
       '--verbose',
-      '--allowedTools', 'Read,Grep,Glob',
+      '--allowedTools', tools.join(','),
       '--model', model,
     ],
   },
   codex: {
     bin: 'codex',
+    defaultTools: [],
     args: (model) => [
       'exec', '-',
       '--json',
@@ -72,7 +76,8 @@ export class CliRunnerService extends Service {
     const emit = (event: CliEvent) => opts.onEvent?.(event)
 
     return new Promise((resolve, reject) => {
-      const child = spawn(config.bin, config.args(opts.model), {
+      const tools = opts.allowedTools ?? config.defaultTools
+      const child = spawn(config.bin, config.args(opts.model, tools), {
         cwd: opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
       })

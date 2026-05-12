@@ -15,6 +15,13 @@ export type CliEvent =
   | { type: 'tool_call'; name: string; input: unknown }
   | { type: 'partial_text'; text: string }
   | { type: 'final'; raw: string; costUsd?: number; durationMs?: number; usage?: TokenUsage }
+  /**
+   * High-level progress marker emitted by GeneratedTourSource around its slow
+   * steps (PR fetch, repo clone, model run, tour parse). Not produced by the
+   * CLI itself — exists so the renderer can show what's happening during the
+   * 30–60s windows before the model starts emitting tool calls.
+   */
+  | { type: 'phase'; name: string; detail?: string }
 
 export interface TokenUsage {
   inputTokens: number

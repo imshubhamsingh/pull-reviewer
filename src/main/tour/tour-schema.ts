@@ -26,6 +26,8 @@ const CodePointerSchema = z.object({
   lineEnd: z.number().int().nonnegative().optional(),
   /** Single line the renderer should center / scroll to — usually the call or decision the step is about. Defaults to lineStart. */
   focusLine: z.number().int().nonnegative().optional(),
+  /** Up to 5 lines the renderer should emphasise. Use when the narration calls out multiple specific spots; `focusLine` is the single-line shorthand. */
+  focusLines: z.array(z.number().int().nonnegative()).max(5).optional(),
   /** Extra lines of buffer above/below the [lineStart, lineEnd] window. Renderer hint; defaults to 2. */
   contextLines: z.number().int().nonnegative().max(20).optional(),
 })
@@ -35,12 +37,15 @@ const DiagramSchema = z.object({
   mermaid: z.string().min(1).max(20_000),
 })
 
+// `body` is preprocessed → string, with a fallback of '' if the model omits it.
+// We'd rather render an empty narration block than throw the whole tour out
+// when one step is missing prose — the prompt still asks for body on every step.
 const TourStepSchema = z
   .object({
     id: z.string().min(1),
     panel: z.enum(PANEL_KINDS),
     title: z.string().min(1).max(120),
-    body: z.string().min(1),
+    body: z.preprocess((v) => (typeof v === 'string' ? v : ''), z.string()),
     code: CodePointerSchema.optional(),
     references: z.array(CodePointerSchema).max(8).optional(),
     diagram: DiagramSchema.optional(),

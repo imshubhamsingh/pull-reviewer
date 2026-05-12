@@ -9,6 +9,8 @@ export interface ReviewDraftRecord {
   prNumber: number
   file: string
   line: number
+  /** First line of the comment range; null/equal-to-line means single-line. */
+  startLine: number | null
   side: ReviewSide
   body: string
   createdAt: string
@@ -20,6 +22,7 @@ export interface ReviewDraftInput {
   prNumber: number
   file: string
   line: number
+  startLine?: number | null
   side: ReviewSide
   body: string
 }
@@ -30,13 +33,14 @@ interface Row {
   pr_number: number
   file: string
   line: number
+  start_line: number | null
   side: ReviewSide
   body: string
   created_at: string
   updated_at: string
 }
 
-const COLUMNS = 'id, repo, pr_number, file, line, side, body, created_at, updated_at'
+const COLUMNS = 'id, repo, pr_number, file, line, start_line, side, body, created_at, updated_at'
 
 export class ReviewDraftStore extends Service {
   constructor(private readonly db: Db) {
@@ -45,43 +49,75 @@ export class ReviewDraftStore extends Service {
 
   list(repo: string, prNumber: number): ReviewDraftRecord[] {
     const rows = this.db.select<Row>(
-      /* sql */ `SELECT ${COLUMNS} FROM review_drafts WHERE repo = ? AND pr_number = ? ORDER BY file, line, id`,
+      /* sql */ `
+        SELECT ${COLUMNS}
+          FROM review_drafts
+         WHERE repo = ?
+           AND pr_number = ?
+         ORDER BY file, line, id
+      `,
       [repo, prNumber],
     )
     return rows.map(toRecord)
   }
 
   get(id: number): ReviewDraftRecord | undefined {
-    const row = this.db.selectOne<Row>(/* sql */ `SELECT ${COLUMNS} FROM review_drafts WHERE id = ?`, [id])
+    const row = this.db.selectOne<Row>(
+      /* sql */ `
+        SELECT ${COLUMNS}
+          FROM review_drafts
+         WHERE id = ?
+      `,
+      [id],
+    )
     return row && toRecord(row)
   }
 
   create(input: ReviewDraftInput): ReviewDraftRecord {
     const now = new Date().toISOString()
     const result = this.db.insert(
-      /* sql */ `INSERT INTO review_drafts (repo, pr_number, file, line, side, body, created_at, updated_at)
-                 VALUES (@repo, @prNumber, @file, @line, @side, @body, @now, @now)`,
-      { ...input, now },
+      /* sql */ `
+        INSERT INTO review_drafts
+          (repo, pr_number, file, line, start_line, side, body, created_at, updated_at)
+        VALUES
+          (@repo, @prNumber, @file, @line, @startLine, @side, @body, @now, @now)
+      `,
+      { ...input, startLine: input.startLine ?? null, now },
     )
     return this.requireById(Number(result.lastInsertRowid))
   }
 
   updateBody(id: number, body: string): ReviewDraftRecord | undefined {
     this.db.update(
-      /* sql */ `UPDATE review_drafts SET body = ?, updated_at = ? WHERE id = ?`,
+      /* sql */ `
+        UPDATE review_drafts
+           SET body = ?,
+               updated_at = ?
+         WHERE id = ?
+      `,
       [body, new Date().toISOString(), id],
     )
     return this.get(id)
   }
 
   remove(id: number): boolean {
-    const { changes } = this.db.delete(/* sql */ `DELETE FROM review_drafts WHERE id = ?`, [id])
+    const { changes } = this.db.delete(
+      /* sql */ `
+        DELETE FROM review_drafts
+         WHERE id = ?
+      `,
+      [id],
+    )
     return changes > 0
   }
 
   removeAll(repo: string, prNumber: number): number {
     const { changes } = this.db.delete(
-      /* sql */ `DELETE FROM review_drafts WHERE repo = ? AND pr_number = ?`,
+      /* sql */ `
+        DELETE FROM review_drafts
+         WHERE repo = ?
+           AND pr_number = ?
+      `,
       [repo, prNumber],
     )
     return changes
@@ -101,6 +137,7 @@ function toRecord(row: Row): ReviewDraftRecord {
     prNumber: row.pr_number,
     file: row.file,
     line: row.line,
+    startLine: row.start_line,
     side: row.side,
     body: row.body,
     createdAt: row.created_at,

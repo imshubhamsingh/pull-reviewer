@@ -2,12 +2,14 @@ import { match } from 'ts-pattern'
 import { useState, type JSX, type ReactNode } from 'react'
 import type { Highlighter } from 'shiki'
 import { useFileSnapshot } from '@/app/hooks/useFileSnapshot'
+import { useGutterSelection } from '@/app/hooks/useGutterSelection'
 import { useShiki } from '@/app/hooks/useShiki'
 import { chooseSha, findStepForRef, highlightWindow, inferLang } from '@/app/lib/code-utils'
 import type { CodePointer, FileSnapshot, TourResult, TourStep } from '@/lib/api'
 import { CodeHeader } from '@/app/components/CodeHeader'
-import { CodeLines } from '@/app/components/CodeLines'
+import { CodeLines, type ComposerTarget } from '@/app/components/CodeLines'
 import { References } from '@/app/components/References'
+import type { QaThreads } from '@/app/hooks/useQaThreads'
 import type { ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 
 interface Props {
@@ -15,10 +17,11 @@ interface Props {
   tour: TourResult
   step: TourStep
   drafts: ReviewDrafts
+  qa: QaThreads
   onJumpToStep: (stepId: string) => void
 }
 
-export function CodePane({ repo, tour, step, drafts, onJumpToStep }: Props): JSX.Element {
+export function CodePane({ repo, tour, step, drafts, qa, onJumpToStep }: Props): JSX.Element {
   const code = step.code
   const sha = chooseSha(tour, code?.side)
   const snapshot = useFileSnapshot(repo, sha, code?.file)
@@ -31,7 +34,7 @@ export function CodePane({ repo, tour, step, drafts, onJumpToStep }: Props): JSX
     .with({ kind: 'loading' }, () => <EmptyPane>Loading file…</EmptyPane>)
     .with({ kind: 'error' }, ({ message }) => <EmptyPane tone="danger">{message}</EmptyPane>)
     .with({ kind: 'ready' }, ({ snap }) => (
-      <ReadyPane snap={snap} code={code} sha={sha} step={step} tour={tour} hl={hl} drafts={drafts} onJumpToStep={onJumpToStep} />
+      <ReadyPane snap={snap} code={code} sha={sha} step={step} tour={tour} hl={hl} drafts={drafts} qa={qa} onJumpToStep={onJumpToStep} />
     ))
     .exhaustive()
 }
@@ -44,18 +47,25 @@ interface ReadyPaneProps {
   tour: TourResult
   hl: Highlighter | undefined
   drafts: ReviewDrafts
+  qa: QaThreads
   onJumpToStep: (stepId: string) => void
 }
 
-function ReadyPane({ snap, code, sha, step, tour, hl, drafts, onJumpToStep }: ReadyPaneProps): JSX.Element {
-  const [composerLine, setComposerLine] = useState<number | null>(null)
+function ReadyPane({ snap, code, sha, step, tour, hl, drafts, qa, onJumpToStep }: ReadyPaneProps): JSX.Element {
+  const [composer, setComposer] = useState<ComposerTarget | null>(null)
+  // Open the composer only on mouseup commit (after a drag / click finishes) so
+  // a drag-select gesture doesn't get clobbered by a composer popping up on mousedown.
+  const selection = useGutterSelection({
+    onCommit: (range) => setComposer({ startLine: range.startLine, endLine: range.endLine }),
+  })
   const fileDrafts = drafts.drafts.filter((d) => d.file === code.file)
 
   if (snap.encoding !== 'utf8' || !snap.content) {
     return <OmittedPane file={code.file} sha={sha} side={code.side} encoding={snap.encoding} size={snap.size} />
   }
   if (!hl) return <EmptyPane>Loading highlighter…</EmptyPane>
-  const { focus, range } = highlightWindow(code)
+  const { focusLines, scrollTo, range } = highlightWindow(code)
+  const reviewSide = code.side === 'before' ? 'before' : 'after'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -64,17 +74,28 @@ function ReadyPane({ snap, code, sha, step, tour, hl, drafts, onJumpToStep }: Re
         highlighter={hl}
         content={snap.content}
         lang={inferLang(code.file)}
-        focus={focus}
+        file={code.file}
+        sha={sha}
+        focusLines={focusLines}
+        scrollTo={scrollTo}
         range={range}
         drafts={fileDrafts}
-        composerLine={composerLine}
-        onOpenComposer={(line) => setComposerLine(line)}
-        onCloseComposer={() => setComposerLine(null)}
-        onSaveDraft={async (line, body) => {
-          // 'diff' isn't a real review side on GitHub — coerce to 'after'.
-          const reviewSide = code.side === 'before' ? 'before' : 'after'
-          await drafts.add({ file: code.file, line, side: reviewSide, body })
-          setComposerLine(null)
+        composer={composer}
+        selection={selection}
+        onCloseComposer={() => { setComposer(null); selection.clear() }}
+        onAskAiStream={(input, onEvent) => qa.askStream(input, { onEvent })}
+        onSaveDraft={async (target, body) => {
+          const lo = Math.min(target.startLine, target.endLine)
+          const hi = Math.max(target.startLine, target.endLine)
+          await drafts.add({
+            file: code.file,
+            line: hi,
+            startLine: lo === hi ? null : lo,
+            side: reviewSide,
+            body,
+          })
+          setComposer(null)
+          selection.clear()
         }}
         onUpdateDraft={drafts.update}
         onDeleteDraft={drafts.remove}

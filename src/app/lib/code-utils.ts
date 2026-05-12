@@ -30,21 +30,41 @@ function rangesOverlap(a: CodePointer, b: CodePointer): boolean {
 }
 
 export interface HighlightWindow {
-  /** Lines that should get the focus-line emphasis. */
-  focus: number | undefined
+  /** Lines that should get the focus-line emphasis. Empty set if no focus tagged. */
+  focusLines: Set<number>
+  /** The "primary" focus to scroll-to — first of focusLines, or undefined. */
+  scrollTo: number | undefined
   /** Inclusive line range to visually highlight. */
   range: { start: number; end: number } | undefined
 }
 
-/** Resolve a CodePointer into renderer hints — focus line + highlight range. */
+/** Resolve a CodePointer into renderer hints — focus line(s) + highlight range. */
 export function highlightWindow(code: CodePointer | undefined): HighlightWindow {
-  if (!code) return { focus: undefined, range: undefined }
-  const focus = code.focusLine ?? code.lineStart
+  if (!code) return emptyWindow()
+  const focusLines = collectFocusLines(code)
+  const scrollTo = focusLines.values().next().value as number | undefined
+  const range = computeRange(code, scrollTo)
+  return { focusLines, scrollTo, range }
+}
+
+function emptyWindow(): HighlightWindow {
+  return { focusLines: new Set(), scrollTo: undefined, range: undefined }
+}
+
+function collectFocusLines(code: CodePointer): Set<number> {
+  const lines = new Set<number>()
+  if (code.focusLine != null) lines.add(code.focusLine)
+  if (code.focusLines) for (const n of code.focusLines) lines.add(n)
+  if (lines.size === 0 && code.lineStart != null) lines.add(code.lineStart)
+  return lines
+}
+
+function computeRange(code: CodePointer, scrollTo: number | undefined): HighlightWindow['range'] {
   const ctx = code.contextLines ?? 2
-  const start = code.lineStart ?? focus
-  const end = code.lineEnd ?? focus ?? start
-  if (start == null || end == null) return { focus, range: undefined }
-  return { focus, range: { start: Math.max(1, start - ctx), end: end + ctx } }
+  const start = code.lineStart ?? scrollTo
+  const end = code.lineEnd ?? scrollTo ?? start
+  if (start == null || end == null) return undefined
+  return { start: Math.max(1, start - ctx), end: end + ctx }
 }
 
 /** Map a file path's extension to a shiki language id. Falls back to plaintext. */

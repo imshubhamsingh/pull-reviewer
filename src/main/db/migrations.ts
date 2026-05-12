@@ -4,6 +4,8 @@ import * as m20260512123142Initial from '@/main/db/migrations/20260512123142-ini
 import * as m20260512191137ChaptersAndDiagrams from '@/main/db/migrations/20260512191137-chapters-and-diagrams'
 import * as m20260512200401TourCostTracking from '@/main/db/migrations/20260512200401-tour-cost-tracking'
 import * as m20260512220000ReviewDrafts from '@/main/db/migrations/20260512220000-review-drafts'
+import * as m20260512230000ReviewDraftRange from '@/main/db/migrations/20260512230000-review-draft-range'
+import * as m20260513000000QaThreads from '@/main/db/migrations/20260513000000-qa-threads'
 
 interface Migration {
   id: string
@@ -19,6 +21,8 @@ const MIGRATIONS: Migration[] = [
   m20260512191137ChaptersAndDiagrams,
   m20260512200401TourCostTracking,
   m20260512220000ReviewDrafts,
+  m20260512230000ReviewDraftRange,
+  m20260513000000QaThreads,
 ]
 
 export function applyMigrations(db: Db, logger: Logger): void {

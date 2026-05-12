@@ -12,6 +12,9 @@ import { CloneStore } from '@/main/git/clone.store'
 import { GitCloneManager } from '@/main/git/clone.manager'
 import { GitRunner } from '@/main/git/git-runner'
 import { WorktreeManager } from '@/main/git/worktree-manager'
+import { ExplainRouter } from '@/main/explain/explain.router'
+import { ExplainService } from '@/main/explain/explain.service'
+import { QaThreadStore } from '@/main/explain/qa.store'
 import { ReviewDraftStore } from '@/main/reviews/review-draft.store'
 import { ReviewRouter } from '@/main/reviews/review.router'
 import { ReviewService } from '@/main/reviews/review.service'
@@ -37,11 +40,13 @@ export interface Services {
   clones: GitCloneManager
   files: FileSnapshotService
   reviews: ReviewService
+  explain: ExplainService
   routers: {
     pullRequests: PullRequestRouter
     tours: TourRouter
     files: FileRouter
     reviews: ReviewRouter
+    explain: ExplainRouter
   }
 }
 
@@ -76,6 +81,9 @@ export function buildServices(): Services {
   const reviewSubmitter = new ReviewSubmitter(auth)
   const reviews = new ReviewService(reviewDrafts, reviewSubmitter)
 
+  const qaStore = new QaThreadStore(db.query)
+  const explain = new ExplainService(files, qaStore, cli)
+
   return {
     db,
     auth,
@@ -85,11 +93,13 @@ export function buildServices(): Services {
     clones,
     files,
     reviews,
+    explain,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),
       tours: new TourRouter(tours),
       files: new FileRouter(files),
       reviews: new ReviewRouter(reviews),
+      explain: new ExplainRouter(explain),
     },
   }
 }

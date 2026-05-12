@@ -25,10 +25,13 @@ export function DraftRow({ draft, onUpdate, onDelete }: Props): JSX.Element {
     )
   }
 
+  const range = draft.startLine != null && draft.startLine !== draft.line
+    ? `lines ${Math.min(draft.startLine, draft.line)}–${Math.max(draft.startLine, draft.line)}`
+    : `line ${draft.line}`
   return (
     <div className="border-border bg-surface mx-3 my-1 rounded-md border p-2 text-xs">
       <div className="text-text-muted mb-1 flex items-center justify-between text-[10px] tracking-wider uppercase">
-        <span>Pending review comment</span>
+        <span>Pending review comment · {range}</span>
         <div className="flex gap-2">
           <button
             type="button"

@@ -20,6 +20,8 @@ interface CommentPayload {
   path: string
   line: number
   side: 'LEFT' | 'RIGHT'
+  start_line?: number
+  start_side?: 'LEFT' | 'RIGHT'
   body: string
 }
 
@@ -43,12 +45,17 @@ export class ReviewSubmitter extends Service {
       commit_id: headSha,
       event,
       body: summary ?? undefined,
-      comments: drafts.map((d): CommentPayload => ({
-        path: d.file,
-        line: d.line,
-        side: d.side === 'before' ? 'LEFT' : 'RIGHT',
-        body: d.body,
-      })),
+      comments: drafts.map((d): CommentPayload => {
+        const side = d.side === 'before' ? 'LEFT' : 'RIGHT'
+        const isRange = d.startLine != null && d.startLine !== d.line
+        return {
+          path: d.file,
+          line: d.line,
+          side,
+          ...(isRange ? { start_line: d.startLine!, start_side: side } : {}),
+          body: d.body,
+        }
+      }),
     }
 
     this.logger.info('Submitting review', { repo, prNumber, draftCount: drafts.length, event })
