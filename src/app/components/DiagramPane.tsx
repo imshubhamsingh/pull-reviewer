@@ -70,37 +70,32 @@ export function DiagramPane({ step }: Props): JSX.Element {
 
 function renderBody(state: RenderState, source: string | undefined, scale: number, ref: React.RefObject<HTMLDivElement | null>): JSX.Element {
   if (state.kind === 'idle') {
-    return <CenterWrap><p className="text-text-muted text-xs">Rendering…</p></CenterWrap>
+    return <p className="text-text-muted p-6 text-xs">Rendering…</p>
   }
   if (state.kind === 'error') {
     return (
-      <CenterWrap>
-        <pre className="text-text-danger bg-surface w-full max-w-3xl overflow-auto rounded-md p-3 text-xs">
-          Bad mermaid: {state.message}
-          {source && `\n\n${source}`}
-        </pre>
-      </CenterWrap>
+      <pre className="text-text-danger bg-surface m-4 w-fit overflow-auto rounded-md p-3 text-xs">
+        Bad mermaid: {state.message}
+        {source && `\n\n${source}`}
+      </pre>
     )
   }
+  // `width: fit-content` + `margin: 0 auto` centers horizontally when the
+  // diagram is smaller than the container, but lets it grow past container
+  // width when zoomed (flex justify-content:center would clip the overflow
+  // instead of producing scrollbars).
   return (
-    <CenterWrap>
-      <div
-        ref={ref}
-        className="diagram-svg"
-        style={{ zoom: scale }}
-        dangerouslySetInnerHTML={{ __html: state.svg }}
-      />
-    </CenterWrap>
+    <div
+      ref={ref}
+      className="diagram-svg"
+      style={{
+        zoom: scale,
+        margin: '24px auto',
+        width: 'fit-content',
+      }}
+      dangerouslySetInnerHTML={{ __html: state.svg }}
+    />
   )
-}
-
-/**
- * Centers its child while letting it grow past the viewport. `min-w-full min-h-full`
- * keeps it at container size when content is small; when content (via `zoom`) is
- * larger, this wrapper grows with it so the scrollable parent picks it up.
- */
-function CenterWrap({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div className="flex min-h-full min-w-full items-center justify-center p-4">{children}</div>
 }
 
 function fitNow(
