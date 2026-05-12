@@ -3,6 +3,7 @@ import type { Db } from '@/main/db/db'
 import * as m20260512123142Initial from '@/main/db/migrations/20260512123142-initial'
 import * as m20260512191137ChaptersAndDiagrams from '@/main/db/migrations/20260512191137-chapters-and-diagrams'
 import * as m20260512200401TourCostTracking from '@/main/db/migrations/20260512200401-tour-cost-tracking'
+import * as m20260512220000ReviewDrafts from '@/main/db/migrations/20260512220000-review-drafts'
 
 interface Migration {
   id: string
@@ -17,6 +18,7 @@ const MIGRATIONS: Migration[] = [
   m20260512123142Initial,
   m20260512191137ChaptersAndDiagrams,
   m20260512200401TourCostTracking,
+  m20260512220000ReviewDrafts,
 ]
 
 export function applyMigrations(db: Db, logger: Logger): void {

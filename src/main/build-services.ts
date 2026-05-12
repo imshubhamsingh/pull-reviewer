@@ -12,6 +12,10 @@ import { CloneStore } from '@/main/git/clone.store'
 import { GitCloneManager } from '@/main/git/clone.manager'
 import { GitRunner } from '@/main/git/git-runner'
 import { WorktreeManager } from '@/main/git/worktree-manager'
+import { ReviewDraftStore } from '@/main/reviews/review-draft.store'
+import { ReviewRouter } from '@/main/reviews/review.router'
+import { ReviewService } from '@/main/reviews/review.service'
+import { ReviewSubmitter } from '@/main/reviews/review.submitter'
 import { CachedTourSource } from '@/main/tour/cached-tour-source'
 import { CliRunnerService } from '@/main/tour/cli-runner.service'
 import { GeneratedTourSource } from '@/main/tour/generated-tour-source'
@@ -32,10 +36,12 @@ export interface Services {
   tours: TourService
   clones: GitCloneManager
   files: FileSnapshotService
+  reviews: ReviewService
   routers: {
     pullRequests: PullRequestRouter
     tours: TourRouter
     files: FileRouter
+    reviews: ReviewRouter
   }
 }
 
@@ -66,6 +72,10 @@ export function buildServices(): Services {
   const fileSnapshotStore = new FileSnapshotStore(db.query)
   const files = new FileSnapshotService(clones, fileSnapshotStore)
 
+  const reviewDrafts = new ReviewDraftStore(db.query)
+  const reviewSubmitter = new ReviewSubmitter(auth)
+  const reviews = new ReviewService(reviewDrafts, reviewSubmitter)
+
   return {
     db,
     auth,
@@ -74,10 +84,12 @@ export function buildServices(): Services {
     tours,
     clones,
     files,
+    reviews,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),
       tours: new TourRouter(tours),
       files: new FileRouter(files),
+      reviews: new ReviewRouter(reviews),
     },
   }
 }
