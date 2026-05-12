@@ -4,6 +4,7 @@ import { useTour } from '@/app/hooks/useTour'
 import { useChapterNav } from '@/app/hooks/useChapterNav'
 import { ChapterStepper } from '@/app/components/ChapterStepper'
 import { CodePane } from '@/app/components/CodePane'
+import { DiagramPane } from '@/app/components/DiagramPane'
 import { DocsPane } from '@/app/components/DocsPane'
 import { GeneratingPanel } from '@/app/components/GeneratingPanel'
 import { StaleBanner } from '@/app/components/StaleBanner'
@@ -82,7 +83,7 @@ function ReadyView({ repo, tour, onRegenerate, onBack }: ReadyProps): JSX.Elemen
 function renderCenter(step: TourStep, repo: string, tour: TourResult, onJumpToStep: (id: string) => void): JSX.Element {
   return match(step.panel)
     .with('code', () => <CodePane repo={repo} tour={tour} step={step} onJumpToStep={onJumpToStep} />)
-    .with('diagram', () => <PlaceholderPane>Diagram pane lands in Phase 9.</PlaceholderPane>)
+    .with('diagram', () => <DiagramPane step={step} />)
     .with('code-map', () => <PlaceholderPane>Code map lands in Phase 10.</PlaceholderPane>)
     .with('docs', () => <PlaceholderPane>This step is docs-only.</PlaceholderPane>)
     .exhaustive()
