@@ -1,22 +1,24 @@
 import { match } from 'ts-pattern'
-import type { JSX, ReactNode } from 'react'
+import { useState, type JSX, type ReactNode } from 'react'
 import type { Highlighter } from 'shiki'
 import { useFileSnapshot } from '@/app/hooks/useFileSnapshot'
 import { useShiki } from '@/app/hooks/useShiki'
 import { chooseSha, findStepForRef, highlightWindow, inferLang } from '@/app/lib/code-utils'
 import type { CodePointer, FileSnapshot, TourResult, TourStep } from '@/lib/api'
 import { CodeHeader } from '@/app/components/CodeHeader'
+import { CodeLines } from '@/app/components/CodeLines'
 import { References } from '@/app/components/References'
-import { ShikiBlock } from '@/app/components/ShikiBlock'
+import type { ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 
 interface Props {
   repo: string
   tour: TourResult
   step: TourStep
+  drafts: ReviewDrafts
   onJumpToStep: (stepId: string) => void
 }
 
-export function CodePane({ repo, tour, step, onJumpToStep }: Props): JSX.Element {
+export function CodePane({ repo, tour, step, drafts, onJumpToStep }: Props): JSX.Element {
   const code = step.code
   const sha = chooseSha(tour, code?.side)
   const snapshot = useFileSnapshot(repo, sha, code?.file)
@@ -29,7 +31,7 @@ export function CodePane({ repo, tour, step, onJumpToStep }: Props): JSX.Element
     .with({ kind: 'loading' }, () => <EmptyPane>Loading file…</EmptyPane>)
     .with({ kind: 'error' }, ({ message }) => <EmptyPane tone="danger">{message}</EmptyPane>)
     .with({ kind: 'ready' }, ({ snap }) => (
-      <ReadyPane snap={snap} code={code} sha={sha} step={step} tour={tour} hl={hl} onJumpToStep={onJumpToStep} />
+      <ReadyPane snap={snap} code={code} sha={sha} step={step} tour={tour} hl={hl} drafts={drafts} onJumpToStep={onJumpToStep} />
     ))
     .exhaustive()
 }
@@ -41,19 +43,42 @@ interface ReadyPaneProps {
   step: TourStep
   tour: TourResult
   hl: Highlighter | undefined
+  drafts: ReviewDrafts
   onJumpToStep: (stepId: string) => void
 }
 
-function ReadyPane({ snap, code, sha, step, tour, hl, onJumpToStep }: ReadyPaneProps): JSX.Element {
+function ReadyPane({ snap, code, sha, step, tour, hl, drafts, onJumpToStep }: ReadyPaneProps): JSX.Element {
+  const [composerLine, setComposerLine] = useState<number | null>(null)
+  const fileDrafts = drafts.drafts.filter((d) => d.file === code.file)
+
   if (snap.encoding !== 'utf8' || !snap.content) {
     return <OmittedPane file={code.file} sha={sha} side={code.side} encoding={snap.encoding} size={snap.size} />
   }
   if (!hl) return <EmptyPane>Loading highlighter…</EmptyPane>
   const { focus, range } = highlightWindow(code)
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <CodeHeader file={code.file} sha={sha} side={code.side} />
-      <ShikiBlock highlighter={hl} content={snap.content} lang={inferLang(code.file)} focus={focus} range={range} />
+      <CodeLines
+        highlighter={hl}
+        content={snap.content}
+        lang={inferLang(code.file)}
+        focus={focus}
+        range={range}
+        drafts={fileDrafts}
+        composerLine={composerLine}
+        onOpenComposer={(line) => setComposerLine(line)}
+        onCloseComposer={() => setComposerLine(null)}
+        onSaveDraft={async (line, body) => {
+          // 'diff' isn't a real review side on GitHub — coerce to 'after'.
+          const reviewSide = code.side === 'before' ? 'before' : 'after'
+          await drafts.add({ file: code.file, line, side: reviewSide, body })
+          setComposerLine(null)
+        }}
+        onUpdateDraft={drafts.update}
+        onDeleteDraft={drafts.remove}
+      />
       {step.references?.length ? (
         <References
           refs={step.references}

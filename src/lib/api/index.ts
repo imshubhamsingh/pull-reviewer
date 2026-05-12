@@ -133,11 +133,42 @@ export interface FileSnapshot {
   accessedAt: string
 }
 
+export type ReviewSide = 'before' | 'after'
+
+export interface ReviewDraft {
+  id: number
+  repo: string
+  prNumber: number
+  file: string
+  line: number
+  side: ReviewSide
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateDraftInput {
+  file: string
+  line: number
+  side?: ReviewSide
+  body: string
+}
+
+export interface SubmitReviewInput {
+  headSha: string
+  summary?: string
+  event?: 'COMMENT' | 'REQUEST_CHANGES' | 'APPROVE'
+}
+
+export interface SubmittedReview {
+  id: number
+  htmlUrl: string
+}
+
 export const api = {
   prs: {
     mine: () => http.get<PullRequestSummary[]>('/api/pull-requests/mine'),
     reviewRequested: () => http.get<PullRequestSummary[]>('/api/pull-requests/review-requested'),
-    assigned: () => http.get<PullRequestSummary[]>('/api/pull-requests/assigned'),
   },
   tours: {
     /** Returns the cached tour, or rejects with ApiError(404) if none exists. Never runs the model. */
@@ -165,6 +196,18 @@ export const api = {
     /** Read a file at a given sha. Read-through cache; fast on repeat reads. */
     get: (repo: string, sha: string, path: string) =>
       http.get<FileSnapshot>(`/api/files/${repo}/${sha}/${encodeURI(path)}`),
+  },
+  reviews: {
+    list: (repo: string, prNumber: number) =>
+      http.get<ReviewDraft[]>(`/api/reviews/${repo}/${prNumber}/drafts`),
+    create: (repo: string, prNumber: number, input: CreateDraftInput) =>
+      http.post<ReviewDraft>(`/api/reviews/${repo}/${prNumber}/drafts`, input),
+    update: (id: number, body: string) =>
+      http.patch<ReviewDraft>(`/api/reviews/drafts/${id}`, { body }),
+    remove: (id: number) =>
+      http.del<{ deleted: boolean }>(`/api/reviews/drafts/${id}`),
+    submit: (repo: string, prNumber: number, input: SubmitReviewInput) =>
+      http.post<SubmittedReview>(`/api/reviews/${repo}/${prNumber}/submit`, input),
   },
 }
 

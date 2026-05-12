@@ -2,6 +2,7 @@ import { match } from 'ts-pattern'
 import type { JSX, ReactNode } from 'react'
 import { useTour } from '@/app/hooks/useTour'
 import { useChapterNav } from '@/app/hooks/useChapterNav'
+import { useReviewDrafts, type ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 import { ChapterStepper } from '@/app/components/ChapterStepper'
 import { CodePane } from '@/app/components/CodePane'
 import { DiagramPane } from '@/app/components/DiagramPane'
@@ -18,6 +19,7 @@ interface Props {
 
 export function TourView({ repo, prNumber, onBack }: Props): JSX.Element {
   const { state, regenerate } = useTour(repo, prNumber)
+  const drafts = useReviewDrafts(repo, prNumber)
   return (
     <div className="flex h-full flex-col">
       <Header repo={repo} prNumber={prNumber} onBack={onBack} />
@@ -27,7 +29,7 @@ export function TourView({ repo, prNumber, onBack }: Props): JSX.Element {
           .with({ kind: 'generating' }, ({ events }) => <GeneratingPanel events={events} />)
           .with({ kind: 'error' }, ({ message }) => <CenterMessage tone="danger">{message}</CenterMessage>)
           .with({ kind: 'ready' }, ({ tour }) => (
-            <ReadyView repo={repo} tour={tour} onRegenerate={regenerate} onBack={onBack} />
+            <ReadyView repo={repo} tour={tour} drafts={drafts} onRegenerate={regenerate} onBack={onBack} />
           ))
           .exhaustive()}
       </div>
@@ -38,11 +40,12 @@ export function TourView({ repo, prNumber, onBack }: Props): JSX.Element {
 interface ReadyProps {
   repo: string
   tour: TourResult
+  drafts: ReviewDrafts
   onRegenerate: () => void
   onBack: () => void
 }
 
-function ReadyView({ repo, tour, onRegenerate, onBack }: ReadyProps): JSX.Element {
+function ReadyView({ repo, tour, drafts, onRegenerate, onBack }: ReadyProps): JSX.Element {
   const nav = useChapterNav(tour.chapters, { onRegenerate, onEscape: onBack })
   const isStale =
     typeof tour.headRefOid === 'string' &&
@@ -71,21 +74,27 @@ function ReadyView({ repo, tour, onRegenerate, onBack }: ReadyProps): JSX.Elemen
         </Section>
         <Section title="Code / Diagram">
           {nav.current
-            ? renderCenter(nav.current.step, repo, tour, jumpToStep)
+            ? renderCenter(nav.current.step, repo, tour, drafts, jumpToStep)
             : <PlaceholderPane>No step.</PlaceholderPane>}
         </Section>
         <Section title="Map">
           <PlaceholderPane>File map lands in Phase 10.</PlaceholderPane>
         </Section>
       </div>
-      <ChapterStepper chapters={tour.chapters} nav={nav} onRegenerate={onRegenerate} />
+      <ChapterStepper
+        chapters={tour.chapters}
+        nav={nav}
+        tour={tour}
+        drafts={drafts}
+        onRegenerate={onRegenerate}
+      />
     </div>
   )
 }
 
-function renderCenter(step: TourStep, repo: string, tour: TourResult, onJumpToStep: (id: string) => void): JSX.Element {
+function renderCenter(step: TourStep, repo: string, tour: TourResult, drafts: ReviewDrafts, onJumpToStep: (id: string) => void): JSX.Element {
   return match(step.panel)
-    .with('code', () => <CodePane repo={repo} tour={tour} step={step} onJumpToStep={onJumpToStep} />)
+    .with('code', () => <CodePane repo={repo} tour={tour} step={step} drafts={drafts} onJumpToStep={onJumpToStep} />)
     .with('diagram', () => <DiagramPane step={step} />)
     .with('code-map', () => <PlaceholderPane>Code map lands in Phase 10.</PlaceholderPane>)
     .with('docs', () => <PlaceholderPane>This step is docs-only.</PlaceholderPane>)

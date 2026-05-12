@@ -1,19 +1,22 @@
 import { useEffect, useState, type JSX } from 'react'
-import type { TourChapter } from '@/lib/api'
+import type { TourChapter, TourResult } from '@/lib/api'
 import type { ChapterNav } from '@/app/hooks/useChapterNav'
+import type { ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 import { ChapterRow } from '@/app/components/ChapterRow'
+import { SubmitReviewButton } from '@/app/components/SubmitReviewButton'
 
 interface Props {
   chapters: TourChapter[]
   nav: ChapterNav
+  tour: TourResult
+  drafts: ReviewDrafts
   onRegenerate: () => void
 }
 
-export function ChapterStepper({ chapters, nav, onRegenerate }: Props): JSX.Element {
+export function ChapterStepper({ chapters, nav, tour, drafts, onRegenerate }: Props): JSX.Element {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set([0]))
   const activeChapter = nav.current?.chapterIdx
 
-  // Auto-expand whichever chapter the user navigates into.
   useEffect(() => {
     if (activeChapter == null) return
     setExpanded((prev) => prev.has(activeChapter) ? prev : new Set([...prev, activeChapter]))
@@ -42,12 +45,19 @@ export function ChapterStepper({ chapters, nav, onRegenerate }: Props): JSX.Elem
           />
         ))}
       </ul>
-      <NavBar nav={nav} onRegenerate={onRegenerate} />
+      <NavBar nav={nav} tour={tour} drafts={drafts} onRegenerate={onRegenerate} />
     </div>
   )
 }
 
-function NavBar({ nav, onRegenerate }: { nav: ChapterNav; onRegenerate: () => void }): JSX.Element {
+interface NavBarProps {
+  nav: ChapterNav
+  tour: TourResult
+  drafts: ReviewDrafts
+  onRegenerate: () => void
+}
+
+function NavBar({ nav, tour, drafts, onRegenerate }: NavBarProps): JSX.Element {
   return (
     <div className="border-border bg-surface flex items-center justify-between gap-4 border-t px-4 py-2">
       <div className="flex gap-2">
@@ -62,13 +72,16 @@ function NavBar({ nav, onRegenerate }: { nav: ChapterNav; onRegenerate: () => vo
           </span>
         )}
       </p>
-      <button
-        type="button"
-        onClick={onRegenerate}
-        className="text-text-secondary hover:text-text-primary text-xs transition-colors"
-      >
-        ⟳ regenerate
-      </button>
+      <div className="flex items-center gap-3">
+        <SubmitReviewButton tour={tour} drafts={drafts} />
+        <button
+          type="button"
+          onClick={onRegenerate}
+          className="text-text-secondary hover:text-text-primary text-xs transition-colors"
+        >
+          ⟳ regenerate
+        </button>
+      </div>
     </div>
   )
 }

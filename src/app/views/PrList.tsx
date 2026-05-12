@@ -4,7 +4,7 @@ import { cn } from '@/app/lib/utils'
 import { usePrLists, type ListState, type PrLists } from '@/app/hooks/usePrLists'
 import type { PullRequestSummary } from '@/lib/api'
 
-type Tab = 'mine' | 'review' | 'assigned'
+type Tab = 'mine' | 'review'
 
 interface Props {
   onOpen: (pr: PullRequestSummary) => void
@@ -14,7 +14,7 @@ export function PrList({ onOpen }: Props): JSX.Element {
   const lists = usePrLists()
   const [tab, setTab] = useState<Tab>('mine')
   const active = pickTab(lists, tab)
-  const isLoading = lists.mine.kind === 'loading' || lists.review.kind === 'loading' || lists.assigned.kind === 'loading'
+  const isLoading = lists.mine.kind === 'loading' || lists.review.kind === 'loading'
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -39,7 +39,6 @@ function pickTab(lists: PrLists, tab: Tab): ListState {
   return match(tab)
     .with('mine', () => lists.mine)
     .with('review', () => lists.review)
-    .with('assigned', () => lists.assigned)
     .exhaustive()
 }
 
@@ -48,7 +47,6 @@ function Tabs({ tab, setTab, lists }: { tab: Tab; setTab: (t: Tab) => void; list
     <div className="border-border mb-4 flex gap-1 border-b">
       <TabBtn active={tab === 'mine'} onClick={() => setTab('mine')} label="Mine" count={count(lists.mine)} />
       <TabBtn active={tab === 'review'} onClick={() => setTab('review')} label="Review requested" count={count(lists.review)} />
-      <TabBtn active={tab === 'assigned'} onClick={() => setTab('assigned')} label="Assigned to me" count={count(lists.assigned)} />
     </div>
   )
 }
@@ -116,6 +114,5 @@ function emptyMessage(tab: Tab): string {
   return match(tab)
     .with('mine', () => 'No open PRs of yours.')
     .with('review', () => 'No PRs are awaiting your review.')
-    .with('assigned', () => 'No PRs are assigned to you.')
     .exhaustive()
 }

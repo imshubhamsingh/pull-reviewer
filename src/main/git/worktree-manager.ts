@@ -35,6 +35,10 @@ export class WorktreeManager extends Service {
     const wt = this.pathFor(repo, sha)
     await fs.mkdir(path.dirname(wt), { recursive: true })
     await fs.rm(wt, { recursive: true, force: true })
+    // Drop registrations whose worktree dirs are gone (e.g. after a crash or
+    // a manual rm -rf) so `worktree add` doesn't refuse with "missing but
+    // already registered".
+    await this.git.ok(['worktree', 'prune'], { cwd: bare })
     await this.git.run(['worktree', 'add', '--detach', wt, sha], { cwd: bare })
     return wt
   }

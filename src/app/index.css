@@ -83,22 +83,14 @@
 .markdown :where(a)              { color: var(--color-text-brand); text-decoration: underline; }
 .markdown :where(strong)         { color: var(--color-text-primary); font-weight: 600; }
 
-/* Shiki output. Theme provides colors; we add line numbers + range/focus markers. */
-.shiki-block .shiki                  { padding: 0.75rem 0; margin: 0; min-height: 100%; background: transparent !important; font-size: 12px; line-height: 1.55; }
-.shiki-block .shiki code             { counter-reset: line-num; display: block; }
-.shiki-block .shiki .line            { padding: 0 0.75rem; }
-.shiki-block .shiki .line::before    {
-  counter-increment: line-num;
-  content: counter(line-num);
-  display: inline-block;
-  width: 3ch;
-  margin-right: 1rem;
-  color: var(--color-text-muted);
-  text-align: right;
-  user-select: none;
-}
-.shiki-block .shiki .line.line-hl    { background-color: hsl(270 50% 30% / 0.18); }
-.shiki-block .shiki .line.line-focus { background-color: hsl(270 80% 50% / 0.22); box-shadow: inset 2px 0 0 var(--color-text-brand); }
+/* Code pane: tokenized line rendering. Theme supplies colors via inline style
+   on each token; we own the layout (gutter, focus, highlight, comment slots). */
+.shiki-block pre                     { margin: 0; padding: 0; line-height: 1.55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.shiki-block .code-line              { display: flex; align-items: flex-start; }
+.shiki-block .code-line .code-gutter { background: transparent; border: none; cursor: pointer; }
+.shiki-block .code-line.line-hl     { background-color: hsl(270 50% 30% / 0.18); }
+.shiki-block .code-line.line-focus  { background-color: hsl(270 80% 50% / 0.22); box-shadow: inset 2px 0 0 var(--color-text-brand); }
+.shiki-block .code-content          { white-space: pre; }
 
 /* Diagram pane: SVG renders at its natural viewBox size; useAutoFit + useZoomPan
    apply CSS `zoom` on the wrapper so the user always sees the whole diagram by
