@@ -2,6 +2,7 @@ import { match } from 'ts-pattern'
 import type { JSX, ReactNode } from 'react'
 import { useTour } from '@/app/hooks/useTour'
 import { useChapterNav } from '@/app/hooks/useChapterNav'
+import { useQaThreads, type QaThreads } from '@/app/hooks/useQaThreads'
 import { useReviewDrafts, type ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 import { ChapterStepper } from '@/app/components/ChapterStepper'
 import { CodePane } from '@/app/components/CodePane'
@@ -18,18 +19,19 @@ interface Props {
 }
 
 export function TourView({ repo, prNumber, onBack }: Props): JSX.Element {
-  const { state, regenerate } = useTour(repo, prNumber)
+  const { state, regenerate, cancel } = useTour(repo, prNumber)
   const drafts = useReviewDrafts(repo, prNumber)
+  const qa = useQaThreads(repo, prNumber)
   return (
     <div className="flex h-full flex-col">
       <Header repo={repo} prNumber={prNumber} onBack={onBack} />
       <div className="min-h-0 flex-1">
         {match(state)
           .with({ kind: 'loading' }, () => <CenterMessage>Loading…</CenterMessage>)
-          .with({ kind: 'generating' }, ({ events }) => <GeneratingPanel events={events} />)
+          .with({ kind: 'generating' }, ({ events }) => <GeneratingPanel events={events} onCancel={cancel} />)
           .with({ kind: 'error' }, ({ message }) => <CenterMessage tone="danger">{message}</CenterMessage>)
           .with({ kind: 'ready' }, ({ tour }) => (
-            <ReadyView repo={repo} tour={tour} drafts={drafts} onRegenerate={regenerate} onBack={onBack} />
+            <ReadyView repo={repo} tour={tour} drafts={drafts} qa={qa} onRegenerate={regenerate} onBack={onBack} />
           ))
           .exhaustive()}
       </div>
@@ -41,11 +43,12 @@ interface ReadyProps {
   repo: string
   tour: TourResult
   drafts: ReviewDrafts
+  qa: QaThreads
   onRegenerate: () => void
   onBack: () => void
 }
 
-function ReadyView({ repo, tour, drafts, onRegenerate, onBack }: ReadyProps): JSX.Element {
+function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps): JSX.Element {
   const nav = useChapterNav(tour.chapters, { onRegenerate, onEscape: onBack })
   const isStale =
     typeof tour.headRefOid === 'string' &&
@@ -53,6 +56,11 @@ function ReadyView({ repo, tour, drafts, onRegenerate, onBack }: ReadyProps): JS
     tour.headRefOid !== tour.currentHeadRefOid
   const jumpToStep = (stepId: string) => {
     const idx = nav.flat.findIndex((f) => f.step.id === stepId)
+    if (idx >= 0) nav.goTo(idx)
+  }
+  const jumpToRef = (ref: { file: string; lineStart?: number; lineEnd?: number }) => {
+    // Find the first step that pins this ref's file; if found, jump there.
+    const idx = nav.flat.findIndex((f) => f.step.code?.file === ref.file)
     if (idx >= 0) nav.goTo(idx)
   }
   return (
@@ -69,12 +77,19 @@ function ReadyView({ repo, tour, drafts, onRegenerate, onBack }: ReadyProps): JS
       <div className="bg-border grid min-h-0 flex-1 grid-cols-[1fr_2fr_1fr] gap-px">
         <Section title="Docs">
           {nav.current
-            ? <DocsPane step={nav.current.step} chapter={nav.current.chapter} />
+            ? <DocsPane
+                step={nav.current.step}
+                chapter={nav.current.chapter}
+                qaThreads={nav.current.step.code ? qa.byFile(nav.current.step.code.file) : []}
+                tourFilePaths={tour.files.map((f) => f.path)}
+                onDeleteQa={qa.remove}
+                onJumpToRef={jumpToRef}
+              />
             : <CenterMessage>No step selected.</CenterMessage>}
         </Section>
         <Section title="Code / Diagram">
           {nav.current
-            ? renderCenter(nav.current.step, repo, tour, drafts, jumpToStep)
+            ? renderCenter(nav.current.step, repo, tour, drafts, qa, jumpToStep)
             : <PlaceholderPane>No step.</PlaceholderPane>}
         </Section>
         <Section title="Map">
@@ -92,9 +107,9 @@ function ReadyView({ repo, tour, drafts, onRegenerate, onBack }: ReadyProps): JS
   )
 }
 
-function renderCenter(step: TourStep, repo: string, tour: TourResult, drafts: ReviewDrafts, onJumpToStep: (id: string) => void): JSX.Element {
+function renderCenter(step: TourStep, repo: string, tour: TourResult, drafts: ReviewDrafts, qa: QaThreads, onJumpToStep: (id: string) => void): JSX.Element {
   return match(step.panel)
-    .with('code', () => <CodePane repo={repo} tour={tour} step={step} drafts={drafts} onJumpToStep={onJumpToStep} />)
+    .with('code', () => <CodePane repo={repo} tour={tour} step={step} drafts={drafts} qa={qa} onJumpToStep={onJumpToStep} />)
     .with('diagram', () => <DiagramPane step={step} />)
     .with('code-map', () => <PlaceholderPane>Code map lands in Phase 10.</PlaceholderPane>)
     .with('docs', () => <PlaceholderPane>This step is docs-only.</PlaceholderPane>)

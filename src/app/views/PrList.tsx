@@ -2,6 +2,7 @@ import { useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import { cn } from '@/app/lib/utils'
 import { usePrLists, type ListState, type PrLists } from '@/app/hooks/usePrLists'
+import { PrCard } from '@/app/components/PrCard'
 import type { PullRequestSummary } from '@/lib/api'
 
 type Tab = 'mine' | 'review'
@@ -30,7 +31,7 @@ export function PrList({ onOpen }: Props): JSX.Element {
         </button>
       </header>
       <Tabs tab={tab} setTab={setTab} lists={lists} />
-      <Body state={active} onOpen={onOpen} emptyMessage={emptyMessage(tab)} />
+      <Body state={active} onOpen={onOpen} emptyMessage={emptyMessage(tab)} tab={tab} />
     </div>
   )
 }
@@ -68,38 +69,23 @@ function TabBtn({ active, onClick, label, count }: { active: boolean; onClick: (
   )
 }
 
-function Body({ state, onOpen, emptyMessage }: { state: ListState; onOpen: (pr: PullRequestSummary) => void; emptyMessage: string }): JSX.Element {
+function Body({ state, onOpen, emptyMessage, tab }: { state: ListState; onOpen: (pr: PullRequestSummary) => void; emptyMessage: string; tab: Tab }): JSX.Element {
   return match(state)
     .with({ kind: 'loading' }, () => <p className="text-text-secondary">Loading…</p>)
     .with({ kind: 'error' }, ({ message }) => <p className="text-text-danger">Failed to load PRs: {message}</p>)
     .with({ kind: 'ready' }, ({ prs }) => prs.length === 0
       ? <p className="text-text-muted text-sm">{emptyMessage}</p>
-      : <PrItems prs={prs} onOpen={onOpen} />,
+      : <PrItems prs={prs} onOpen={onOpen} tab={tab} />,
     )
     .exhaustive()
 }
 
-function PrItems({ prs, onOpen }: { prs: PullRequestSummary[]; onOpen: (pr: PullRequestSummary) => void }): JSX.Element {
+function PrItems({ prs, onOpen, tab }: { prs: PullRequestSummary[]; onOpen: (pr: PullRequestSummary) => void; tab: Tab }): JSX.Element {
   return (
     <ul className="space-y-2">
       {prs.map((pr) => (
         <li key={pr.id}>
-          <button
-            type="button"
-            onClick={() => onOpen(pr)}
-            className="border-border bg-surface hover:bg-surface-hover w-full rounded-md border px-4 py-3 text-left transition-colors"
-          >
-            <div className="flex items-baseline gap-2">
-              <span className="text-text-secondary text-sm">#{pr.number}</span>
-              <span className="text-text-primary font-medium">{pr.title}</span>
-              {pr.isDraft && <span className="text-text-muted text-xs">· draft</span>}
-            </div>
-            <div className="text-text-muted mt-1 flex items-baseline gap-2 text-xs">
-              <span>{pr.repo}</span>
-              <span aria-hidden>·</span>
-              <span>{pr.author}</span>
-            </div>
-          </button>
+          <PrCard pr={pr} context={tab} onOpen={onOpen} />
         </li>
       ))}
     </ul>

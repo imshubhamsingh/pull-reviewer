@@ -2,6 +2,9 @@ import { graphql } from '@octokit/graphql'
 import type { AuthService } from '@/main/auth/auth.service'
 import { Service } from '@/main/service'
 
+export type PrState = 'OPEN' | 'CLOSED' | 'MERGED'
+export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null
+
 export interface PullRequestSummary {
   id: string
   number: number
@@ -10,7 +13,13 @@ export interface PullRequestSummary {
   repo: string
   author: string
   isDraft: boolean
+  state: PrState
+  createdAt: string
   updatedAt: string
+  additions: number
+  deletions: number
+  changedFiles: number
+  reviewDecision: ReviewDecision
 }
 
 interface SearchNode {
@@ -19,7 +28,13 @@ interface SearchNode {
   title: string
   url: string
   isDraft: boolean
+  state: PrState
+  createdAt: string
   updatedAt: string
+  additions: number
+  deletions: number
+  changedFiles: number
+  reviewDecision: ReviewDecision
   author: { login: string } | null
   repository: { nameWithOwner: string }
 }
@@ -29,7 +44,8 @@ const QUERY = `
     search(query: $q, type: ISSUE, first: 50) {
       nodes {
         ... on PullRequest {
-          id number title url isDraft updatedAt
+          id number title url isDraft state createdAt updatedAt
+          additions deletions changedFiles reviewDecision
           author { login }
           repository { nameWithOwner }
         }
@@ -66,7 +82,13 @@ export class PullRequestService extends Service {
         repo: n.repository.nameWithOwner,
         author: n.author?.login ?? 'unknown',
         isDraft: n.isDraft,
+        state: n.state,
+        createdAt: n.createdAt,
         updatedAt: n.updatedAt,
+        additions: n.additions ?? 0,
+        deletions: n.deletions ?? 0,
+        changedFiles: n.changedFiles ?? 0,
+        reviewDecision: n.reviewDecision ?? null,
       }))
   }
 }

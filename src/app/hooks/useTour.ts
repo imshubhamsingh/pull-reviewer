@@ -11,6 +11,7 @@ export type TourState =
 interface UseTourResult {
   state: TourState
   regenerate: () => void
+  cancel: () => void
 }
 
 export function useTour(repo: string, prNumber: number): UseTourResult {
@@ -45,7 +46,16 @@ export function useTour(repo: string, prNumber: number): UseTourResult {
     return () => acRef.current?.abort()
   }, [load])
 
-  return { state, regenerate: () => { void load(true) } }
+  const cancel = useCallback(() => {
+    acRef.current?.abort()
+    setState({ kind: 'error', message: 'Generation cancelled' })
+  }, [])
+
+  return {
+    state,
+    regenerate: () => { void load(true) },
+    cancel,
+  }
 }
 
 async function tryGetCached(repo: string, prNumber: number): Promise<TourResult | undefined> {

@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react'
 import mermaid from 'mermaid'
 import { marked } from 'marked'
 import { cn } from '@/app/lib/utils'
-import { useAutoFit } from '@/app/hooks/useAutoFit'
-import { useDragPan } from '@/app/hooks/useDragPan'
-import { useZoomPan, type ZoomPan } from '@/app/hooks/useZoomPan'
+import { useCanvasTransform, type CanvasController } from '@/app/hooks/useCanvasTransform'
 import type { TourStep } from '@/lib/api'
 
 mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', fontFamily: 'inherit' })
@@ -23,18 +21,23 @@ interface NaturalSize {
   height: number
 }
 
+const FIT_PADDING = 48
+const ZOOM_STEP = 1.25
+
 export function DiagramPane({ step }: Props): JSX.Element {
   const [state, setState] = useState<RenderState>({ kind: 'idle' })
   const [natural, setNatural] = useState<NaturalSize | undefined>()
-  const zp = useZoomPan(1)
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const drag = useDragPan(containerRef)
+  const canvas = useCanvasTransform()
+  const [dragging, setDragging] = useState(false)
+  const fittedForRef = useRef<string | null>(null)
   const id = `mermaid-${step.id}`
 
   useEffect(() => {
     let cancelled = false
     setNatural(undefined)
+    fittedForRef.current = null
     if (!step.diagram) { setState({ kind: 'error', message: 'No mermaid source on this step.' }); return }
     mermaid.render(id, step.diagram.mermaid)
       .then(({ svg }) => { if (!cancelled) setState({ kind: 'ok', svg }) })
@@ -42,9 +45,8 @@ export function DiagramPane({ step }: Props): JSX.Element {
     return () => { cancelled = true }
   }, [id, step.diagram])
 
-  // Measure the SVG's natural size once after it's in the DOM; everything
-  // downstream (auto-fit, scroll bounds) keys off this.
-  useEffect(() => {
+  // Measure natural SVG size once it's in the DOM.
+  useLayoutEffect(() => {
     if (state.kind !== 'ok') return
     const svg = contentRef.current?.querySelector('svg')
     if (!svg) return
@@ -55,12 +57,63 @@ export function DiagramPane({ step }: Props): JSX.Element {
     if (width > 0 && height > 0) setNatural({ width, height })
   }, [state])
 
-  useAutoFit({
-    containerRef,
-    contentRef,
-    apply: zp.fitTo,
-    trigger: natural,
-  })
+  const fit = useCallback(() => {
+    fitDiagram(containerRef.current, natural, canvas.setAll)
+  }, [natural, canvas.setAll])
+
+  // First-fit when both natural and container are settled. Subsequent container
+  // resizes don't re-fit (we don't want to clobber user zoom/pan on layout shifts).
+  useEffect(() => {
+    if (!natural || !containerRef.current) return
+    if (fittedForRef.current === keyFor(state)) return
+    // Defer one frame so the container has its final size after the SVG mounts.
+    const raf = requestAnimationFrame(() => {
+      fit()
+      fittedForRef.current = keyFor(state)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [natural, state, fit])
+
+  // Wheel: cmd/ctrl = zoom at cursor; otherwise pan (trackpad swipe).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (e.ctrlKey || e.metaKey) {
+        const factor = Math.exp(-e.deltaY * 0.002)
+        canvas.zoomBy(factor, cursorIn(el, e))
+      } else {
+        canvas.panBy(-e.deltaX, -e.deltaY)
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [canvas.panBy, canvas.zoomBy])
+
+  // Drag-to-pan: mousedown on canvas → mousemove on window → mouseup ends.
+  const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    dragRef.current = { x: e.clientX, y: e.clientY, tx: canvas.transform.x, ty: canvas.transform.y }
+    setDragging(true)
+  }, [canvas.transform.x, canvas.transform.y])
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current
+      if (!d) return
+      canvas.update((prev) => ({ ...prev, x: d.tx + (e.clientX - d.x), y: d.ty + (e.clientY - d.y) }))
+    }
+    const onUp = () => { dragRef.current = null; setDragging(false) }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [dragging, canvas.update])
 
   const captionHtml = useMemo(() => marked.parse(step.body, { async: false }), [step.body])
 
@@ -69,16 +122,15 @@ export function DiagramPane({ step }: Props): JSX.Element {
       <div className="relative flex-1">
         <div
           ref={containerRef}
-          onWheel={zp.onWheel}
-          onMouseDown={drag.onMouseDown}
+          onMouseDown={onMouseDown}
           className={cn(
-            'absolute inset-0 overflow-auto select-none',
-            drag.isDragging ? 'cursor-grabbing' : state.kind === 'ok' ? 'cursor-grab' : 'cursor-default',
+            'absolute inset-0 overflow-hidden select-none',
+            dragging ? 'cursor-grabbing' : state.kind === 'ok' ? 'cursor-grab' : 'cursor-default',
           )}
         >
-          {renderBody(state, step.diagram?.mermaid, zp.scale, natural, contentRef)}
+          {renderBody(state, step.diagram?.mermaid, canvas, natural, contentRef)}
         </div>
-        {state.kind === 'ok' && <ZoomControls zp={zp} onFit={() => fitNow(containerRef, contentRef, zp.fitTo)} />}
+        {state.kind === 'ok' && <ZoomControls canvas={canvas} onFit={fit} containerRef={containerRef} />}
       </div>
       <figcaption
         className="markdown border-border text-text-secondary border-t px-4 py-3 text-xs leading-relaxed"
@@ -88,82 +140,90 @@ export function DiagramPane({ step }: Props): JSX.Element {
   )
 }
 
+function keyFor(state: RenderState): string | null {
+  return state.kind === 'ok' ? state.svg : null
+}
+
 function renderBody(
   state: RenderState,
   source: string | undefined,
-  scale: number,
+  canvas: CanvasController,
   natural: NaturalSize | undefined,
   contentRef: React.RefObject<HTMLDivElement | null>,
 ): JSX.Element {
-  if (state.kind === 'idle') return <p className="text-text-muted p-6 text-xs">Rendering…</p>
+  if (state.kind === 'idle') return <p className="text-text-muted absolute inset-0 grid place-content-center text-xs">Rendering…</p>
   if (state.kind === 'error') {
     return (
-      <pre className="text-text-danger bg-surface m-4 w-fit overflow-auto rounded-md p-3 text-xs">
+      <pre className="text-text-danger bg-surface m-4 w-fit max-w-full overflow-auto rounded-md p-3 text-xs">
         Bad mermaid: {state.message}
         {source && `\n\n${source}`}
       </pre>
     )
   }
-  // Outer wrapper has the *scaled* dimensions so the scrollable parent sees
-  // the right bounds. Inner is absolute-positioned and uses transform:scale,
-  // which doesn't affect layout — only visual size — so we never fight the
-  // box model. Pre-measurement (`natural === undefined`) renders at native
-  // size off-screen briefly so we can grab viewBox dimensions.
-  const wrapperStyle: React.CSSProperties = natural
-    ? {
-        width: natural.width * scale,
-        height: natural.height * scale,
-        position: 'relative',
-        margin: '24px auto',
-        flexShrink: 0,
-      }
-    : { opacity: 0, position: 'absolute', pointerEvents: 'none' }
-  const contentStyle: React.CSSProperties = natural
-    ? {
+  const { x, y, scale } = canvas.transform
+  // Wrapper size = natural * scale → SVG re-renders at this size as vector.
+  // Only translate via CSS transform so we never rasterize.
+  const width = natural ? natural.width * scale : undefined
+  const height = natural ? natural.height * scale : undefined
+  return (
+    <div
+      style={{
         position: 'absolute',
         top: 0,
         left: 0,
-        width: natural.width,
-        height: natural.height,
-        transform: `scale(${scale})`,
-        transformOrigin: 'top left',
-      }
-    : {}
-  return (
-    <div style={wrapperStyle}>
-      <div ref={contentRef} className="diagram-svg" style={contentStyle} dangerouslySetInnerHTML={{ __html: state.svg }} />
+        width,
+        height,
+        transform: `translate3d(${x}px, ${y}px, 0)`,
+        // While we're still measuring natural size, render off-screen.
+        visibility: natural ? 'visible' : 'hidden',
+      }}
+    >
+      <div ref={contentRef} className="diagram-svg" dangerouslySetInnerHTML={{ __html: state.svg }} />
     </div>
   )
 }
 
-function fitNow(
-  containerRef: React.RefObject<HTMLDivElement | null>,
-  contentRef: React.RefObject<HTMLDivElement | null>,
-  apply: (s: number) => void,
+function fitDiagram(
+  container: HTMLDivElement | null,
+  natural: NaturalSize | undefined,
+  setAll: CanvasController['setAll'],
 ): void {
-  const c = containerRef.current
-  const svg = contentRef.current?.querySelector('svg')
-  if (!c || !svg) return
-  const vb = svg.viewBox.baseVal
-  const w = vb && vb.width > 0 ? vb.width : svg.getBoundingClientRect().width
-  const h = vb && vb.height > 0 ? vb.height : svg.getBoundingClientRect().height
-  if (!w || !h) return
-  apply(Math.min((c.clientWidth - 48) / w, (c.clientHeight - 48) / h))
+  if (!container || !natural) return
+  const cw = container.clientWidth
+  const ch = container.clientHeight
+  if (cw <= 0 || ch <= 0) return
+  const scale = Math.min((cw - FIT_PADDING) / natural.width, (ch - FIT_PADDING) / natural.height)
+  setAll({
+    scale,
+    x: (cw - natural.width * scale) / 2,
+    y: (ch - natural.height * scale) / 2,
+  })
 }
 
-function ZoomControls({ zp, onFit }: { zp: ZoomPan; onFit: () => void }): JSX.Element {
+interface ZoomControlsProps {
+  canvas: CanvasController
+  onFit: () => void
+  containerRef: React.RefObject<HTMLDivElement | null>
+}
+
+function ZoomControls({ canvas, onFit, containerRef }: ZoomControlsProps): JSX.Element {
+  const anchorCenter = (): { x: number; y: number } => {
+    const el = containerRef.current
+    if (!el) return { x: 0, y: 0 }
+    return { x: el.clientWidth / 2, y: el.clientHeight / 2 }
+  }
   return (
-    <div className="border-border bg-surface absolute top-2 right-2 z-10 flex items-center gap-1 rounded-md border p-1 shadow-md">
-      <ZoomBtn onClick={zp.zoomOut} label="−" title="Zoom out" />
+    <div className="border-border bg-surface/95 absolute right-4 top-4 z-10 flex items-center gap-1 rounded-md border p-1 shadow-lg backdrop-blur-sm">
+      <ZoomBtn onClick={() => canvas.zoomBy(1 / ZOOM_STEP, anchorCenter())} label="−" title="Zoom out" />
       <button
         type="button"
-        onClick={zp.reset}
-        title="Reset to 100%"
-        className="text-text-secondary hover:text-text-primary w-12 text-xs tabular-nums transition-colors"
+        onClick={onFit}
+        title="Fit to pane"
+        className="text-text-secondary hover:text-text-primary w-14 text-center text-xs tabular-nums transition-colors"
       >
-        {Math.round(zp.scale * 100)}%
+        {Math.round(canvas.transform.scale * 100)}%
       </button>
-      <ZoomBtn onClick={zp.zoomIn} label="+" title="Zoom in" />
+      <ZoomBtn onClick={() => canvas.zoomBy(ZOOM_STEP, anchorCenter())} label="+" title="Zoom in" />
       <span aria-hidden className="bg-border mx-0.5 h-4 w-px" />
       <button
         type="button"
@@ -188,4 +248,9 @@ function ZoomBtn({ onClick, label, title }: { onClick: () => void; label: string
       {label}
     </button>
   )
+}
+
+function cursorIn(el: HTMLElement, e: { clientX: number; clientY: number }): { x: number; y: number } {
+  const rect = el.getBoundingClientRect()
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
 }
