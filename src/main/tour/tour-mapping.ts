@@ -1,3 +1,4 @@
+import type { TokenUsage } from '@/main/tour/cli-event'
 import type { Provider } from '@/main/tour/cli-runner.service'
 import type { PrContext } from '@/main/tour/pr-context.collector'
 import type { Tour } from '@/main/tour/tour-schema'
@@ -11,6 +12,9 @@ export function recordFromGeneration(args: {
   previousHeadRefOid: string | null
   provider: Provider
   model: string
+  costUsd?: number
+  durationMs?: number
+  usage?: TokenUsage
 }): TourRecord {
   const now = new Date().toISOString()
   return {
@@ -27,6 +31,9 @@ export function recordFromGeneration(args: {
     lastAccessedAt: now,
     provider: args.provider,
     model: args.model,
+    costUsd: args.costUsd ?? null,
+    durationMs: args.durationMs ?? null,
+    usage: args.usage ?? null,
   }
 }
 
@@ -44,5 +51,8 @@ export function resultFromRecord(rec: TourRecord, currentHeadRefOid: string): To
     files: rec.files,
     provider: rec.provider,
     model: rec.model,
+    costUsd: rec.costUsd,
+    durationMs: rec.durationMs,
+    usage: rec.usage,
   }
 }

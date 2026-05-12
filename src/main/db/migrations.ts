@@ -2,6 +2,7 @@ import type { Logger } from '@/lib/logger'
 import type { Db } from '@/main/db/db'
 import * as m20260512123142Initial from '@/main/db/migrations/20260512123142-initial'
 import * as m20260512191137ChaptersAndDiagrams from '@/main/db/migrations/20260512191137-chapters-and-diagrams'
+import * as m20260512200401TourCostTracking from '@/main/db/migrations/20260512200401-tour-cost-tracking'
 
 interface Migration {
   id: string
@@ -15,6 +16,7 @@ interface Migration {
 const MIGRATIONS: Migration[] = [
   m20260512123142Initial,
   m20260512191137ChaptersAndDiagrams,
+  m20260512200401TourCostTracking,
 ]
 
 export function applyMigrations(db: Db, logger: Logger): void {

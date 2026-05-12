@@ -53,15 +53,15 @@ export function buildServices(): Services {
   const liveHead = new HeadShaResolver(collector, tourStore)
   const models = new ModelCatalog()
   const cachedSource = new CachedTourSource(tourStore, liveHead)
-  const generatedSource = new GeneratedTourSource(collector, promptBuilder, cli, parser, tourStore, models)
-  const tours = new TourService(cachedSource, generatedSource, tourStore)
-
   const gitRunner = new GitRunner()
   const cloneStore = new CloneStore(db.query)
   const cloneRegistry = new CloneRegistry(gitRunner, cloneStore)
   const blobReader = new BlobReader(gitRunner, cloneRegistry)
   const worktrees = new WorktreeManager(gitRunner, cloneRegistry)
   const clones = new GitCloneManager(cloneRegistry, blobReader, worktrees)
+
+  const generatedSource = new GeneratedTourSource(collector, promptBuilder, cli, parser, tourStore, models, clones)
+  const tours = new TourService(cachedSource, generatedSource, tourStore)
 
   const fileSnapshotStore = new FileSnapshotStore(db.query)
   const files = new FileSnapshotService(clones, fileSnapshotStore)

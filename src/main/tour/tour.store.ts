@@ -1,4 +1,5 @@
 import type { Db } from '@/main/db/db'
+import type { TokenUsage } from '@/main/tour/cli-event'
 import type { PrFile } from '@/main/tour/pr-context.collector'
 import type { Tour } from '@/main/tour/tour-schema'
 import { Service } from '@/main/service'
@@ -20,6 +21,9 @@ export interface TourRecord {
   lastAccessedAt: string
   provider: string
   model: string
+  costUsd: number | null                // total cost of the run (null if provider didn't report one)
+  durationMs: number | null             // wall-clock time the model took
+  usage: TokenUsage | null              // raw token counts
 }
 
 interface Row {
@@ -37,12 +41,15 @@ interface Row {
   schema_version: number
   provider: string
   model: string
+  cost_usd: number | null
+  duration_ms: number | null
+  usage_json: string | null
 }
 
 const COLUMNS = `
   pr_id, repo, pr_number, head_ref_oid, base_ref_oid, previous_head_ref_oid,
   chapters_json, files_json, generated_at, last_checked_at, last_accessed_at,
-  schema_version, provider, model
+  schema_version, provider, model, cost_usd, duration_ms, usage_json
 `
 
 export class TourStore extends Service {
@@ -69,7 +76,7 @@ export class TourStore extends Service {
        VALUES (
          @prId, @repo, @prNumber, @headRefOid, @baseRefOid, @previousHeadRefOid,
          @chaptersJson, @filesJson, @generatedAt, @lastCheckedAt, @lastAccessedAt,
-         @schemaVersion, @provider, @model, '[]'
+         @schemaVersion, @provider, @model, @costUsd, @durationMs, @usageJson, '[]'
        )
        ON CONFLICT(pr_id) DO UPDATE SET
          head_ref_oid          = excluded.head_ref_oid,
@@ -82,7 +89,10 @@ export class TourStore extends Service {
          last_accessed_at      = excluded.last_accessed_at,
          schema_version        = excluded.schema_version,
          provider              = excluded.provider,
-         model                 = excluded.model`,
+         model                 = excluded.model,
+         cost_usd              = excluded.cost_usd,
+         duration_ms           = excluded.duration_ms,
+         usage_json            = excluded.usage_json`,
       {
         prId: rec.prId,
         repo: rec.repo,
@@ -98,6 +108,9 @@ export class TourStore extends Service {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         provider: rec.provider,
         model: rec.model,
+        costUsd: rec.costUsd,
+        durationMs: rec.durationMs,
+        usageJson: rec.usage ? JSON.stringify(rec.usage) : null,
       },
     )
   }
@@ -130,5 +143,8 @@ function rowToRecord(row: Row): TourRecord {
     lastAccessedAt: row.last_accessed_at,
     provider: row.provider,
     model: row.model,
+    costUsd: row.cost_usd,
+    durationMs: row.duration_ms,
+    usage: row.usage_json ? (JSON.parse(row.usage_json) as TokenUsage) : null,
   }
 }

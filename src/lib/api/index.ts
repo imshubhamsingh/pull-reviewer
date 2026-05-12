@@ -1,4 +1,5 @@
 import { buildClient, type HttpClient } from '@/lib/api/client'
+import { openSSE, type SseMessage } from '@/lib/api/sse'
 
 declare global {
   interface Window {
@@ -14,6 +15,14 @@ function getBaseUrl(): Promise<string> {
 }
 
 export const http: HttpClient = buildClient(getBaseUrl)
+
+/** Event stream emitted by the tour-generation SSE endpoint. Mirrors backend CliEvent + done/error frames. */
+export type TourStreamEvent =
+  | { event: 'tool_call'; data: { type: 'tool_call'; name: string; input: unknown } }
+  | { event: 'partial_text'; data: { type: 'partial_text'; text: string } }
+  | { event: 'final'; data: { type: 'final'; raw: string; costUsd?: number; durationMs?: number; usage?: TokenUsage } }
+  | { event: 'done'; data: TourResult }
+  | { event: 'error'; data: { message: string } }
 
 export interface PullRequestSummary {
   id: string
@@ -82,6 +91,13 @@ export interface PrFile {
   deletions: number
 }
 
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
+}
+
 export interface TourResult {
   prNumber: number
   repo: string
@@ -95,6 +111,12 @@ export interface TourResult {
   files: PrFile[]
   provider: string
   model: string
+  /** Total cost reported by the provider for the generation run (USD). null if unknown. */
+  costUsd: number | null
+  /** Wall-clock time the model took, in ms. null if unknown. */
+  durationMs: number | null
+  /** Raw token counts as reported by the provider. */
+  usage: TokenUsage | null
 }
 
 export interface FileSnapshot {
@@ -125,6 +147,15 @@ export const api = {
       http.post<TourResult>(
         `/api/tours/${repo}/${prNumber}/generate${opts.force ? '?force=true' : ''}`,
       ),
+    /**
+     * Streamed generation — yields tool_call / partial_text / final events while the model
+     * runs, then a final 'done' event with the TourResult (or 'error' on failure).
+     */
+    streamGenerate: (
+      repo: string,
+      prNumber: number,
+      opts: { force?: boolean; signal?: AbortSignal } = {},
+    ) => streamTourGeneration(repo, prNumber, opts),
   },
   files: {
     /** Read a file at a given sha. Read-through cache; fast on repeat reads. */
@@ -134,3 +165,31 @@ export const api = {
 }
 
 export { ApiError } from '@/lib/api/client'
+
+async function* streamTourGeneration(
+  repo: string,
+  prNumber: number,
+  opts: { force?: boolean; signal?: AbortSignal },
+): AsyncGenerator<TourStreamEvent> {
+  const base = await getBaseUrl()
+  const url = `${base}/api/tours/${repo}/${prNumber}/generate/stream${opts.force ? '?force=true' : ''}`
+  for await (const msg of openSSE(url, { method: 'POST', signal: opts.signal })) {
+    yield decodeStreamEvent(msg)
+  }
+}
+
+function decodeStreamEvent(msg: SseMessage): TourStreamEvent {
+  const data: unknown = JSON.parse(msg.data)
+  switch (msg.event) {
+    case 'tool_call':
+    case 'partial_text':
+    case 'final':
+      return { event: msg.event, data } as TourStreamEvent
+    case 'done':
+      return { event: 'done', data: data as TourResult }
+    case 'error':
+      return { event: 'error', data: data as { message: string } }
+    default:
+      return { event: 'partial_text', data: { type: 'partial_text', text: msg.data } }
+  }
+}
