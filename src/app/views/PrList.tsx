@@ -15,10 +15,20 @@ export function PrList({ onOpen }: Props): JSX.Element {
   const [tab, setTab] = useState<Tab>('mine')
   const active = tab === 'mine' ? lists.mine : lists.review
 
+  const isLoading = lists.mine.kind === 'loading' || lists.review.kind === 'loading'
+
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <header className="mb-5">
+      <header className="mb-5 flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">Pull requests</h1>
+        <button
+          type="button"
+          onClick={lists.refresh}
+          disabled={isLoading}
+          className="text-text-secondary hover:text-text-primary text-xs transition-colors disabled:opacity-40"
+        >
+          {isLoading ? 'Refreshing…' : '⟳ Refresh'}
+        </button>
       </header>
       <Tabs tab={tab} setTab={setTab} mineCount={count(lists.mine)} reviewCount={count(lists.review)} />
       <Body state={active} onOpen={onOpen} emptyMessage={emptyMessage(tab)} />

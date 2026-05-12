@@ -66,8 +66,11 @@ export function buildClient(getBaseUrl: () => Promise<string>): HttpClient {
   }
 
   return {
+    // `cache: 'no-store'` so Chrome's HTTP cache never serves a stale GET
+    // response for the embedded localhost API. The backend sets no
+    // Cache-Control headers and we always want fresh data on each request.
     get: <T,>(path: string, query?: Query, init?: RequestInit) =>
-      requestJson<T>(withQuery(path, query), { ...init, method: 'GET' }),
+      requestJson<T>(withQuery(path, query), { cache: 'no-store', ...init, method: 'GET' }),
     post: <T,>(path: string, body?: unknown, init?: RequestInit) =>
       requestJson<T>(path, { ...init, method: 'POST', body: body == null ? undefined : JSON.stringify(body) }),
     patch: <T,>(path: string, body?: unknown, init?: RequestInit) =>

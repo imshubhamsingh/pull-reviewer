@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { api, type PullRequestSummary } from '@/lib/api'
 
 export type ListState =
@@ -9,25 +9,30 @@ export type ListState =
 export interface PrLists {
   mine: ListState
   review: ListState
+  refresh: () => void
 }
 
 export function usePrLists(): PrLists {
   const [mine, setMine] = useState<ListState>({ kind: 'loading' })
   const [review, setReview] = useState<ListState>({ kind: 'loading' })
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let cancelled = false
-    const load = (
+    const run = (
       fn: () => Promise<PullRequestSummary[]>,
       set: Dispatch<SetStateAction<ListState>>,
-    ) => fn()
-      .then((prs) => { if (!cancelled) set({ kind: 'ready', prs }) })
-      .catch((err: Error) => { if (!cancelled) set({ kind: 'error', message: err.message }) })
-
-    load(api.prs.mine, setMine)
-    load(api.prs.reviewRequested, setReview)
+    ) => {
+      set({ kind: 'loading' })
+      return fn()
+        .then((prs) => { if (!cancelled) set({ kind: 'ready', prs }) })
+        .catch((err: Error) => { if (!cancelled) set({ kind: 'error', message: err.message }) })
+    }
+    void run(api.prs.mine, setMine)
+    void run(api.prs.reviewRequested, setReview)
     return () => { cancelled = true }
   }, [])
 
-  return { mine, review }
+  useEffect(() => load(), [load])
+
+  return { mine, review, refresh: load }
 }
