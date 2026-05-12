@@ -1,5 +1,6 @@
 import { serve, type ServerType } from '@hono/node-server'
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import type { Services } from '@/main/build-services'
 import { logger } from '@/lib/logger'
 
@@ -11,6 +12,15 @@ export interface RunningServer {
 export function startApiServer(services: Services): Promise<RunningServer> {
   const log = logger.child({ name: 'ApiServer' })
   const app = new Hono()
+
+  // The renderer origin differs from the API host in dev (vite serves on
+  // localhost:5173, Hono binds to 127.0.0.1). Permissive CORS is safe here —
+  // the server only listens on 127.0.0.1, so no external can reach it.
+  app.use('*', cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Accept'],
+  }))
 
   app.get('/health', (c) => c.json({ ok: true }))
   app.route('/api/pull-requests', services.routers.pullRequests.routes())
