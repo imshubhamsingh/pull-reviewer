@@ -44,27 +44,29 @@ export class PullRequestService extends Service {
   }
 
   async listMine(): Promise<PullRequestSummary[]> {
-    return this.search('is:open author:@me archived:false')
+    return this.search('is:pr is:open author:@me archived:false')
   }
 
   async listReviewRequested(): Promise<PullRequestSummary[]> {
-    return this.search('is:open review-requested:@me archived:false')
+    return this.search('is:pr is:open review-requested:@me archived:false')
   }
 
   private async search(q: string): Promise<PullRequestSummary[]> {
     this.logger.info('Searching pull requests', { q })
     const token = await this.auth.getToken()
     const client = graphql.defaults({ headers: { authorization: `token ${token}` } })
-    const data = await client<{ search: { nodes: SearchNode[] } }>(QUERY, { q })
-    return data.search.nodes.map((n) => ({
-      id: n.id,
-      number: n.number,
-      title: n.title,
-      url: n.url,
-      repo: n.repository.nameWithOwner,
-      author: n.author?.login ?? 'unknown',
-      isDraft: n.isDraft,
-      updatedAt: n.updatedAt,
-    }))
+    const data = await client<{ search: { nodes: Array<Partial<SearchNode>> } }>(QUERY, { q })
+    return data.search.nodes
+      .filter((n): n is SearchNode => n.repository != null && n.id != null)
+      .map((n) => ({
+        id: n.id,
+        number: n.number,
+        title: n.title,
+        url: n.url,
+        repo: n.repository.nameWithOwner,
+        author: n.author?.login ?? 'unknown',
+        isDraft: n.isDraft,
+        updatedAt: n.updatedAt,
+      }))
   }
 }
