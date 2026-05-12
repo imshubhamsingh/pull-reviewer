@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type RefObject } from 'react'
+import { useLayoutEffect, type RefObject } from 'react'
 
 interface NaturalSize {
   width: number
@@ -9,18 +9,19 @@ interface Options {
   containerRef: RefObject<HTMLElement | null>
   contentRef: RefObject<HTMLElement | null>
   apply: (scale: number) => void
-  /** Re-fit whenever this changes. Pass the render state / SVG string. */
+  /** Auto-fit fires exactly once each time this changes — typically the rendered SVG string. */
   trigger: unknown
-  /** Padding subtracted from the available area so the content has breathing room. */
   padding?: number
 }
 
 /**
- * Measures the first SVG inside `contentRef` and applies a scale that makes
- * it fit inside `containerRef`. Re-runs on container resize.
+ * Measures the first SVG inside `contentRef` and applies a one-shot scale that
+ * fits it inside `containerRef`. Fires only when `trigger` changes (i.e. when a
+ * new diagram is rendered) so user zoom/pan is never silently overwritten by a
+ * background resize.
  */
 export function useAutoFit({ containerRef, contentRef, apply, trigger, padding = 24 }: Options): void {
-  const fit = useCallback(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current
     const content = contentRef.current
     if (!container || !content) return
@@ -29,18 +30,7 @@ export function useAutoFit({ containerRef, contentRef, apply, trigger, padding =
     const availW = Math.max(1, container.clientWidth - padding)
     const availH = Math.max(1, container.clientHeight - padding)
     apply(Math.min(availW / size.width, availH / size.height))
-  }, [containerRef, contentRef, apply, padding])
-
-  // `trigger` is in the dep array so the effect re-runs when the SVG changes
-  // (step swap). containerRef/contentRef are stable refs — only `fit` matters.
-  useEffect(() => {
-    fit()
-    const container = containerRef.current
-    if (!container) return
-    const ro = new ResizeObserver(fit)
-    ro.observe(container)
-    return () => ro.disconnect()
-  }, [fit, trigger, containerRef])
+  }, [trigger, containerRef, contentRef, apply, padding])
 }
 
 function measureSvg(host: HTMLElement): NaturalSize | undefined {

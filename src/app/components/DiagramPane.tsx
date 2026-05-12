@@ -46,16 +46,18 @@ export function DiagramPane({ step }: Props): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div
-        ref={containerRef}
-        onWheel={zp.onWheel}
-        onMouseDown={drag.onMouseDown}
-        className={cn(
-          'relative flex flex-1 overflow-auto select-none',
-          drag.isDragging ? 'cursor-grabbing' : state.kind === 'ok' ? 'cursor-grab' : 'cursor-default',
-        )}
-      >
-        {renderBody(state, step.diagram?.mermaid, zp.scale, contentRef)}
+      <div className="relative flex-1">
+        <div
+          ref={containerRef}
+          onWheel={zp.onWheel}
+          onMouseDown={drag.onMouseDown}
+          className={cn(
+            'absolute inset-0 overflow-auto select-none',
+            drag.isDragging ? 'cursor-grabbing' : state.kind === 'ok' ? 'cursor-grab' : 'cursor-default',
+          )}
+        >
+          {renderBody(state, step.diagram?.mermaid, zp.scale, contentRef)}
+        </div>
         {state.kind === 'ok' && <ZoomControls zp={zp} onFit={() => fitNow(containerRef, contentRef, zp.fitTo)} />}
       </div>
       <figcaption
@@ -68,24 +70,37 @@ export function DiagramPane({ step }: Props): JSX.Element {
 
 function renderBody(state: RenderState, source: string | undefined, scale: number, ref: React.RefObject<HTMLDivElement | null>): JSX.Element {
   if (state.kind === 'idle') {
-    return <p className="text-text-muted m-auto text-xs">Rendering…</p>
+    return <CenterWrap><p className="text-text-muted text-xs">Rendering…</p></CenterWrap>
   }
   if (state.kind === 'error') {
     return (
-      <pre className="text-text-danger bg-surface m-4 w-full overflow-auto rounded-md p-3 text-xs">
-        Bad mermaid: {state.message}
-        {source && `\n\n${source}`}
-      </pre>
+      <CenterWrap>
+        <pre className="text-text-danger bg-surface w-full max-w-3xl overflow-auto rounded-md p-3 text-xs">
+          Bad mermaid: {state.message}
+          {source && `\n\n${source}`}
+        </pre>
+      </CenterWrap>
     )
   }
   return (
-    <div
-      ref={ref}
-      className="diagram-svg m-auto p-4"
-      style={{ zoom: scale }}
-      dangerouslySetInnerHTML={{ __html: state.svg }}
-    />
+    <CenterWrap>
+      <div
+        ref={ref}
+        className="diagram-svg"
+        style={{ zoom: scale }}
+        dangerouslySetInnerHTML={{ __html: state.svg }}
+      />
+    </CenterWrap>
   )
+}
+
+/**
+ * Centers its child while letting it grow past the viewport. `min-w-full min-h-full`
+ * keeps it at container size when content is small; when content (via `zoom`) is
+ * larger, this wrapper grows with it so the scrollable parent picks it up.
+ */
+function CenterWrap({ children }: { children: React.ReactNode }): JSX.Element {
+  return <div className="flex min-h-full min-w-full items-center justify-center p-4">{children}</div>
 }
 
 function fitNow(
@@ -105,7 +120,7 @@ function fitNow(
 
 function ZoomControls({ zp, onFit }: { zp: ZoomPan; onFit: () => void }): JSX.Element {
   return (
-    <div className="border-border bg-surface absolute top-2 right-2 flex items-center gap-1 rounded-md border p-1 shadow-md">
+    <div className="border-border bg-surface absolute top-2 right-2 z-10 flex items-center gap-1 rounded-md border p-1 shadow-md">
       <ZoomBtn onClick={zp.zoomOut} label="−" title="Zoom out" />
       <button
         type="button"
