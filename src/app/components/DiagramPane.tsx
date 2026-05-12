@@ -18,8 +18,14 @@ type RenderState =
   | { kind: 'ok'; svg: string }
   | { kind: 'error'; message: string }
 
+interface NaturalSize {
+  width: number
+  height: number
+}
+
 export function DiagramPane({ step }: Props): JSX.Element {
   const [state, setState] = useState<RenderState>({ kind: 'idle' })
+  const [natural, setNatural] = useState<NaturalSize | undefined>()
   const zp = useZoomPan(1)
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -28,6 +34,7 @@ export function DiagramPane({ step }: Props): JSX.Element {
 
   useEffect(() => {
     let cancelled = false
+    setNatural(undefined)
     if (!step.diagram) { setState({ kind: 'error', message: 'No mermaid source on this step.' }); return }
     mermaid.render(id, step.diagram.mermaid)
       .then(({ svg }) => { if (!cancelled) setState({ kind: 'ok', svg }) })
@@ -35,11 +42,24 @@ export function DiagramPane({ step }: Props): JSX.Element {
     return () => { cancelled = true }
   }, [id, step.diagram])
 
+  // Measure the SVG's natural size once after it's in the DOM; everything
+  // downstream (auto-fit, scroll bounds) keys off this.
+  useEffect(() => {
+    if (state.kind !== 'ok') return
+    const svg = contentRef.current?.querySelector('svg')
+    if (!svg) return
+    const vb = svg.viewBox.baseVal
+    const rect = svg.getBoundingClientRect()
+    const width = vb && vb.width > 0 ? vb.width : rect.width
+    const height = vb && vb.height > 0 ? vb.height : rect.height
+    if (width > 0 && height > 0) setNatural({ width, height })
+  }, [state])
+
   useAutoFit({
     containerRef,
     contentRef,
     apply: zp.fitTo,
-    trigger: state.kind === 'ok' ? state.svg : null,
+    trigger: natural,
   })
 
   const captionHtml = useMemo(() => marked.parse(step.body, { async: false }), [step.body])
@@ -56,7 +76,7 @@ export function DiagramPane({ step }: Props): JSX.Element {
             drag.isDragging ? 'cursor-grabbing' : state.kind === 'ok' ? 'cursor-grab' : 'cursor-default',
           )}
         >
-          {renderBody(state, step.diagram?.mermaid, zp.scale, contentRef)}
+          {renderBody(state, step.diagram?.mermaid, zp.scale, natural, contentRef)}
         </div>
         {state.kind === 'ok' && <ZoomControls zp={zp} onFit={() => fitNow(containerRef, contentRef, zp.fitTo)} />}
       </div>
@@ -68,10 +88,14 @@ export function DiagramPane({ step }: Props): JSX.Element {
   )
 }
 
-function renderBody(state: RenderState, source: string | undefined, scale: number, ref: React.RefObject<HTMLDivElement | null>): JSX.Element {
-  if (state.kind === 'idle') {
-    return <p className="text-text-muted p-6 text-xs">Rendering…</p>
-  }
+function renderBody(
+  state: RenderState,
+  source: string | undefined,
+  scale: number,
+  natural: NaturalSize | undefined,
+  contentRef: React.RefObject<HTMLDivElement | null>,
+): JSX.Element {
+  if (state.kind === 'idle') return <p className="text-text-muted p-6 text-xs">Rendering…</p>
   if (state.kind === 'error') {
     return (
       <pre className="text-text-danger bg-surface m-4 w-fit overflow-auto rounded-md p-3 text-xs">
@@ -80,21 +104,35 @@ function renderBody(state: RenderState, source: string | undefined, scale: numbe
       </pre>
     )
   }
-  // `width: fit-content` + `margin: 0 auto` centers horizontally when the
-  // diagram is smaller than the container, but lets it grow past container
-  // width when zoomed (flex justify-content:center would clip the overflow
-  // instead of producing scrollbars).
-  return (
-    <div
-      ref={ref}
-      className="diagram-svg"
-      style={{
-        zoom: scale,
+  // Outer wrapper has the *scaled* dimensions so the scrollable parent sees
+  // the right bounds. Inner is absolute-positioned and uses transform:scale,
+  // which doesn't affect layout — only visual size — so we never fight the
+  // box model. Pre-measurement (`natural === undefined`) renders at native
+  // size off-screen briefly so we can grab viewBox dimensions.
+  const wrapperStyle: React.CSSProperties = natural
+    ? {
+        width: natural.width * scale,
+        height: natural.height * scale,
+        position: 'relative',
         margin: '24px auto',
-        width: 'fit-content',
-      }}
-      dangerouslySetInnerHTML={{ __html: state.svg }}
-    />
+        flexShrink: 0,
+      }
+    : { opacity: 0, position: 'absolute', pointerEvents: 'none' }
+  const contentStyle: React.CSSProperties = natural
+    ? {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: natural.width,
+        height: natural.height,
+        transform: `scale(${scale})`,
+        transformOrigin: 'top left',
+      }
+    : {}
+  return (
+    <div style={wrapperStyle}>
+      <div ref={contentRef} className="diagram-svg" style={contentStyle} dangerouslySetInnerHTML={{ __html: state.svg }} />
+    </div>
   )
 }
 
@@ -110,7 +148,7 @@ function fitNow(
   const w = vb && vb.width > 0 ? vb.width : svg.getBoundingClientRect().width
   const h = vb && vb.height > 0 ? vb.height : svg.getBoundingClientRect().height
   if (!w || !h) return
-  apply(Math.min((c.clientWidth - 24) / w, (c.clientHeight - 24) / h))
+  apply(Math.min((c.clientWidth - 48) / w, (c.clientHeight - 48) / h))
 }
 
 function ZoomControls({ zp, onFit }: { zp: ZoomPan; onFit: () => void }): JSX.Element {
