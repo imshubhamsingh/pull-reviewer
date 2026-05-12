@@ -1,10 +1,10 @@
 import { useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import { cn } from '@/app/lib/utils'
-import { usePrLists, type ListState } from '@/app/hooks/usePrLists'
+import { usePrLists, type ListState, type PrLists } from '@/app/hooks/usePrLists'
 import type { PullRequestSummary } from '@/lib/api'
 
-type Tab = 'mine' | 'review'
+type Tab = 'mine' | 'review' | 'assigned'
 
 interface Props {
   onOpen: (pr: PullRequestSummary) => void
@@ -13,9 +13,8 @@ interface Props {
 export function PrList({ onOpen }: Props): JSX.Element {
   const lists = usePrLists()
   const [tab, setTab] = useState<Tab>('mine')
-  const active = tab === 'mine' ? lists.mine : lists.review
-
-  const isLoading = lists.mine.kind === 'loading' || lists.review.kind === 'loading'
+  const active = pickTab(lists, tab)
+  const isLoading = lists.mine.kind === 'loading' || lists.review.kind === 'loading' || lists.assigned.kind === 'loading'
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -30,17 +29,26 @@ export function PrList({ onOpen }: Props): JSX.Element {
           {isLoading ? 'Refreshing…' : '⟳ Refresh'}
         </button>
       </header>
-      <Tabs tab={tab} setTab={setTab} mineCount={count(lists.mine)} reviewCount={count(lists.review)} />
+      <Tabs tab={tab} setTab={setTab} lists={lists} />
       <Body state={active} onOpen={onOpen} emptyMessage={emptyMessage(tab)} />
     </div>
   )
 }
 
-function Tabs({ tab, setTab, mineCount, reviewCount }: { tab: Tab; setTab: (t: Tab) => void; mineCount: string; reviewCount: string }): JSX.Element {
+function pickTab(lists: PrLists, tab: Tab): ListState {
+  return match(tab)
+    .with('mine', () => lists.mine)
+    .with('review', () => lists.review)
+    .with('assigned', () => lists.assigned)
+    .exhaustive()
+}
+
+function Tabs({ tab, setTab, lists }: { tab: Tab; setTab: (t: Tab) => void; lists: PrLists }): JSX.Element {
   return (
     <div className="border-border mb-4 flex gap-1 border-b">
-      <TabBtn active={tab === 'mine'} onClick={() => setTab('mine')} label="Mine" count={mineCount} />
-      <TabBtn active={tab === 'review'} onClick={() => setTab('review')} label="Review requested" count={reviewCount} />
+      <TabBtn active={tab === 'mine'} onClick={() => setTab('mine')} label="Mine" count={count(lists.mine)} />
+      <TabBtn active={tab === 'review'} onClick={() => setTab('review')} label="Review requested" count={count(lists.review)} />
+      <TabBtn active={tab === 'assigned'} onClick={() => setTab('assigned')} label="Assigned to me" count={count(lists.assigned)} />
     </div>
   )
 }
@@ -105,5 +113,9 @@ function count(state: ListState): string {
 }
 
 function emptyMessage(tab: Tab): string {
-  return tab === 'mine' ? 'No open PRs of yours.' : 'No PRs are awaiting your review.'
+  return match(tab)
+    .with('mine', () => 'No open PRs of yours.')
+    .with('review', () => 'No PRs are awaiting your review.')
+    .with('assigned', () => 'No PRs are assigned to you.')
+    .exhaustive()
 }

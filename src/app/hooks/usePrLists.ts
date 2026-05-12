@@ -9,12 +9,14 @@ export type ListState =
 export interface PrLists {
   mine: ListState
   review: ListState
+  assigned: ListState
   refresh: () => void
 }
 
 export function usePrLists(): PrLists {
   const [mine, setMine] = useState<ListState>({ kind: 'loading' })
   const [review, setReview] = useState<ListState>({ kind: 'loading' })
+  const [assigned, setAssigned] = useState<ListState>({ kind: 'loading' })
 
   const load = useCallback(() => {
     let cancelled = false
@@ -29,10 +31,11 @@ export function usePrLists(): PrLists {
     }
     void run(api.prs.mine, setMine)
     void run(api.prs.reviewRequested, setReview)
+    void run(api.prs.assigned, setAssigned)
     return () => { cancelled = true }
   }, [])
 
   useEffect(() => load(), [load])
 
-  return { mine, review, refresh: load }
+  return { mine, review, assigned, refresh: load }
 }

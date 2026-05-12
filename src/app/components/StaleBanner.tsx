@@ -1,8 +1,8 @@
 import type { JSX } from 'react'
 
 interface Props {
-  generatedFor: string
-  currentHead: string
+  generatedFor: string | null | undefined
+  currentHead: string | null | undefined
   onRegenerate: () => void
 }
 
@@ -29,6 +29,7 @@ export function StaleBanner({ generatedFor, currentHead, onRegenerate }: Props):
   )
 }
 
-function Sha({ children }: { children: string }): JSX.Element {
-  return <code className="text-text-primary font-mono">{children.slice(0, 7)}</code>
+function Sha({ children }: { children: string | null | undefined }): JSX.Element {
+  const short = typeof children === 'string' && children.length >= 7 ? children.slice(0, 7) : 'unknown'
+  return <code className="text-text-primary font-mono">{short}</code>
 }

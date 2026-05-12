@@ -51,6 +51,10 @@ export class PullRequestService extends Service {
     return this.search('is:pr is:open review-requested:@me archived:false')
   }
 
+  async listAssigned(): Promise<PullRequestSummary[]> {
+    return this.search('is:pr is:open assignee:@me archived:false')
+  }
+
   private async search(q: string): Promise<PullRequestSummary[]> {
     this.logger.info('Searching pull requests', { q })
     const token = await this.auth.getToken()

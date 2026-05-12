@@ -20,6 +20,11 @@ export class PullRequestRouter extends Service {
       return c.json(data)
     })
 
+    app.get('/assigned', async (c) => {
+      const data = await this.pullRequests.listAssigned()
+      return c.json(data)
+    })
+
     return app
   }
 }

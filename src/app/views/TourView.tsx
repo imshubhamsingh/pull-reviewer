@@ -44,7 +44,10 @@ interface ReadyProps {
 
 function ReadyView({ repo, tour, onRegenerate, onBack }: ReadyProps): JSX.Element {
   const nav = useChapterNav(tour.chapters, { onRegenerate, onEscape: onBack })
-  const isStale = tour.headRefOid !== tour.currentHeadRefOid
+  const isStale =
+    typeof tour.headRefOid === 'string' &&
+    typeof tour.currentHeadRefOid === 'string' &&
+    tour.headRefOid !== tour.currentHeadRefOid
   const jumpToStep = (stepId: string) => {
     const idx = nav.flat.findIndex((f) => f.step.id === stepId)
     if (idx >= 0) nav.goTo(idx)

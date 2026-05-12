@@ -137,6 +137,7 @@ export const api = {
   prs: {
     mine: () => http.get<PullRequestSummary[]>('/api/pull-requests/mine'),
     reviewRequested: () => http.get<PullRequestSummary[]>('/api/pull-requests/review-requested'),
+    assigned: () => http.get<PullRequestSummary[]>('/api/pull-requests/assigned'),
   },
   tours: {
     /** Returns the cached tour, or rejects with ApiError(404) if none exists. Never runs the model. */
