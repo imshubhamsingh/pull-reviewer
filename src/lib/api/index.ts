@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern'
 import { buildClient, type HttpClient } from '@/lib/api/client'
 import { openSSE, type SseMessage } from '@/lib/api/sse'
 
@@ -180,16 +181,11 @@ async function* streamTourGeneration(
 
 function decodeStreamEvent(msg: SseMessage): TourStreamEvent {
   const data: unknown = JSON.parse(msg.data)
-  switch (msg.event) {
-    case 'tool_call':
-    case 'partial_text':
-    case 'final':
-      return { event: msg.event, data } as TourStreamEvent
-    case 'done':
-      return { event: 'done', data: data as TourResult }
-    case 'error':
-      return { event: 'error', data: data as { message: string } }
-    default:
-      return { event: 'partial_text', data: { type: 'partial_text', text: msg.data } }
-  }
+  return match(msg.event)
+    .with('tool_call', () => ({ event: 'tool_call', data }) as TourStreamEvent)
+    .with('partial_text', () => ({ event: 'partial_text', data }) as TourStreamEvent)
+    .with('final', () => ({ event: 'final', data }) as TourStreamEvent)
+    .with('done', () => ({ event: 'done' as const, data: data as TourResult }))
+    .with('error', () => ({ event: 'error' as const, data: data as { message: string } }))
+    .otherwise(() => ({ event: 'partial_text' as const, data: { type: 'partial_text', text: msg.data } }))
 }
