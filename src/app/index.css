@@ -53,3 +53,32 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/*
+ * Scoped markdown styles for tour step bodies. Kept minimal — the prompt
+ * produces simple markdown (paragraphs, lists, inline code, bold).
+ */
+.markdown :where(p)              { margin: 0 0 0.65em; }
+.markdown :where(p:last-child)   { margin-bottom: 0; }
+.markdown :where(h1, h2, h3, h4) { color: var(--color-text-primary); font-weight: 600; margin: 1em 0 0.4em; }
+.markdown :where(h3)             { font-size: 0.95rem; }
+.markdown :where(h4)             { font-size: 0.85rem; }
+.markdown :where(ul, ol)         { padding-left: 1.25em; margin: 0 0 0.65em; }
+.markdown :where(li)             { margin-bottom: 0.2em; }
+.markdown :where(code)           {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-xs);
+  padding: 0.05em 0.35em;
+  font-size: 0.85em;
+}
+.markdown :where(pre)            {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-sm);
+  padding: 0.65em 0.85em;
+  overflow-x: auto;
+  margin: 0 0 0.65em;
+}
+.markdown :where(pre code)       { background: transparent; padding: 0; }
+.markdown :where(a)              { color: var(--color-text-brand); text-decoration: underline; }
+.markdown :where(strong)         { color: var(--color-text-primary); font-weight: 600; }
