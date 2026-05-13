@@ -96,6 +96,11 @@ export class CliStreamParser {
       if (block.type === 'text' && typeof block.text === 'string') {
         this.accumulatedText += block.text
         emit({ type: 'partial_text', text: block.text })
+      } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
+        // Surface the model's reasoning so the user sees life during long
+        // think windows. Don't accumulate into finalText — thinking isn't
+        // part of the JSON answer.
+        emit({ type: 'partial_text', text: block.thinking })
       } else if (block.type === 'tool_use' && typeof block.name === 'string') {
         emit({ type: 'tool_call', name: block.name, input: block.input ?? null })
       }

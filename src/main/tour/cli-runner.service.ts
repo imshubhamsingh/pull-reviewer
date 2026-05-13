@@ -62,6 +62,10 @@ const PROVIDERS: Record<Provider, ProviderConfig> = {
   },
 }
 
+function titleCase(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 export class CliRunnerService extends Service {
   run(opts: CliRunOptions): Promise<CliRunResult> {
     const config = PROVIDERS[opts.provider]
@@ -77,9 +81,13 @@ export class CliRunnerService extends Service {
 
     return new Promise((resolve, reject) => {
       const tools = opts.allowedTools ?? config.defaultTools
+      emit({ type: 'phase', name: `Spawning local ${titleCase(opts.provider)} CLI`, detail: opts.model })
       const child = spawn(config.bin, config.args(opts.model, tools), {
         cwd: opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      child.on('spawn', () => {
+        emit({ type: 'phase', name: 'Running model', detail: `${opts.provider} · ${opts.model}` })
       })
 
       let stderr = ''

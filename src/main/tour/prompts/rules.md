@@ -1,5 +1,10 @@
 # Rules
 
+## Streaming feedback — narrate as you work
+- **Begin your response with 1-3 sentences of plain-text plan** before the JSON. Name the chapter count you intend and the broad areas you'll group by ("Analyzing 47 files. Will structure as 6 chapters: backend wiring, data model, frontend, auth, tests, supporting changes."). This gives the user visibility while you work — the parser strips everything before the first `[` of the JSON array.
+- **Use Read or Grep at least once per chapter you author**, even when the diff text in your context is clear. Reading at least one file per chapter both grounds your understanding and emits a visible activity event for the user. On large PRs this is non-optional — silent generation looks like the app has hung.
+- After the plan + tool calls, output the JSON array as the final block. Nothing after the closing `]`.
+
 ## Structure — sized to the PR
 - **You decide the chapter count.** Scale it to the PR:
   - tiny (<10 files): 2-3 chapters
@@ -11,6 +16,11 @@
 - Each chapter has 2-10 steps. Total step count should scale with PR size — roughly ~1 step per 3-5 changed files.
 - Start with a "docs" step that summarises the whole change. Consider a 'diagram' step early on (kind 'fileGraph' or 'sequence') for the big picture.
 - Put tests, lockfile changes, and generated files in their own chapter, last.
+
+## Coverage — every file appears somewhere
+- **Every file in the PR diff MUST appear in at least one step**, either as `code.file` (the file pinned to that step) OR inside some step's `references[]` (a mentioned file). No file may be silently dropped.
+- The interesting files become `code.file` of their own steps. The supporting cast — tests, lockfiles, generated assets, binaries, config tweaks — can be batched into the final chapter's steps via `references[]` (≤8 per step, so multiple steps if needed).
+- For a file you have nothing meaningful to say about (e.g., `+0/-0` binary, lockfile churn): still surface it in `references[]` of a step like "Supporting changes" so the reader knows it shifted. A one-line mention is enough.
 
 ## Step authoring — one thing per step
 - **Every step MUST have a non-empty 'body'.** Even diagram-only steps need prose telling the reader what to look at in the diagram — the diagram is not self-explanatory.

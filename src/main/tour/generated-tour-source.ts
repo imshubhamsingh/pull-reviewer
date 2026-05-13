@@ -3,6 +3,7 @@ import type { CliRunResult, CliRunnerService, Provider } from '@/main/tour/cli-r
 import type { ModelCatalog } from '@/main/tour/model-catalog'
 import type { PrContext, PrContextCollector } from '@/main/tour/pr-context.collector'
 import type { PromptBuilder } from '@/main/tour/prompt.builder'
+import { coverageRetryHint, uncoveredFiles } from '@/main/tour/tour-coverage'
 import type { Tour } from '@/main/tour/tour-schema'
 import type { TourParser } from '@/main/tour/tour.parser'
 import { recordFromGeneration, resultFromRecord } from '@/main/tour/tour-mapping'
@@ -76,21 +77,23 @@ export class GeneratedTourSource extends Service implements TourSource {
     let lastError: Error | undefined
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       this.emitAttemptPhase(opts, attempt, lastError, settings)
-      const outcome = await this.attemptOnce(ctx, settings, opts, worktree, lastError)
+      const isFinal = attempt === MAX_RETRIES
+      const outcome = await this.attemptOnce(ctx, settings, opts, worktree, lastError, isFinal)
       if (outcome.ok) return outcome.value
       lastError = outcome.error
-      this.logger.warn('Tour parse failed', { attempt, err: lastError.message })
+      this.logger.warn('Tour attempt failed', { attempt, err: lastError.message })
     }
     throw new Error(`Tour generation failed after ${MAX_RETRIES + 1} attempts: ${lastError!.message}`)
   }
 
-  /** Run the model once + parse; never throws — wraps failure in `{ ok: false, error }`. */
+  /** Run the model once + parse + validate coverage; never throws — wraps failure in `{ ok: false, error }`. */
   private async attemptOnce(
     ctx: PrContext,
     settings: ResolvedSettings,
     opts: GenerateTourOptions,
     worktree: string,
     retryHint: Error | undefined,
+    isFinalAttempt: boolean,
   ): Promise<AttemptOutcome> {
     const run = await this.cli.run({
       prompt: this.promptBuilder.build(ctx, retryHint?.message),
@@ -102,22 +105,32 @@ export class GeneratedTourSource extends Service implements TourSource {
     })
     opts.onEvent?.({ type: 'phase', name: 'Parsing tour' })
     try {
-      return { ok: true, value: { run, chapters: this.parser.parse(run.raw) } }
+      const chapters = this.parser.parse(run.raw)
+      this.checkCoverage(ctx, chapters, isFinalAttempt)
+      return { ok: true, value: { run, chapters } }
     } catch (e) {
       return { ok: false, error: e as Error }
     }
+  }
+
+  /** Throws on coverage gap unless this is the final attempt — then logs and accepts. */
+  private checkCoverage(ctx: PrContext, chapters: Tour, isFinalAttempt: boolean): void {
+    const missing = uncoveredFiles(chapters, ctx.files)
+    if (missing.length === 0) return
+    if (!isFinalAttempt) throw new Error(coverageRetryHint(missing))
+    this.logger.warn('Accepting tour with coverage gap', {
+      missingCount: missing.length,
+      missingSample: missing.slice(0, 10),
+    })
   }
 
   private emitAttemptPhase(
     opts: GenerateTourOptions,
     attempt: number,
     lastError: Error | undefined,
-    settings: ResolvedSettings,
+    _settings: ResolvedSettings,
   ): void {
-    if (attempt === 0) {
-      opts.onEvent?.({ type: 'phase', name: 'Running model', detail: `${settings.provider} · ${settings.model}` })
-      return
-    }
+    if (attempt === 0) return // cli-runner emits "Spawning…" then "Running model"
     opts.onEvent?.({
       type: 'phase',
       name: `Retry ${attempt}/${MAX_RETRIES}`,

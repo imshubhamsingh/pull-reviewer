@@ -19,6 +19,7 @@ export function GeneratingPanel({ events, onCancel }: Props): JSX.Element {
   const phase = useMemo(() => latestPhase(events), [events])
   const toolCounts = useMemo(() => countTools(events), [events])
   const tail = useMemo(() => recentActivities(events, TAIL), [events])
+  const thinking = useMemo(() => latestThinking(events), [events])
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 p-8">
@@ -32,6 +33,11 @@ export function GeneratingPanel({ events, onCancel }: Props): JSX.Element {
         <ul className="text-text-muted mx-auto w-fit max-w-2xl space-y-0.5 font-mono text-xs">
           {tail.map((line, i) => <li key={i} className="truncate">{line}</li>)}
         </ul>
+      )}
+      {thinking && (
+        <p className="text-text-muted/70 mx-auto max-w-2xl truncate font-mono text-[11px] italic">
+          … {thinking}
+        </p>
       )}
       {onCancel && (
         <button
@@ -77,6 +83,25 @@ function useElapsed(): number {
   return now - start
 }
 
+/** Latest partial_text from the model, cleaned for single-line display. */
+function latestThinking(events: TourStreamEvent[]): string | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e && e.event === 'partial_text') {
+      const cleaned = cleanFragment(e.data.text)
+      if (cleaned) return cleaned
+    }
+  }
+  return undefined
+}
+
+function cleanFragment(text: string): string {
+  // Collapse newlines, strip leading JSON punctuation that's pure noise on its own.
+  const single = text.replace(/\s+/g, ' ').trim()
+  if (single.length < 2) return ''
+  return single.length > 120 ? single.slice(0, 119) + '…' : single
+}
+
 function latestPhase(events: TourStreamEvent[]): Phase {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]
@@ -116,7 +141,7 @@ function describe(e: TourStreamEvent): string | null {
       const args = stringifyInput(data.input)
       return args ? `→ ${data.name} ${args}` : `→ ${data.name}`
     })
-    .with({ event: 'partial_text' }, ({ data }) => `… ${trim(data.text.trim(), 100)}`)
+    .with({ event: 'partial_text' }, () => null)
     .with({ event: 'phase' }, ({ data }) => `▸ ${data.name}${data.detail ? ` — ${data.detail}` : ''}`)
     .with({ event: 'final' }, () => '✓ model finished — parsing tour…')
     .with({ event: 'done' }, () => '✓ done')
