@@ -2,12 +2,14 @@ import { match } from 'ts-pattern'
 import type { JSX, ReactNode } from 'react'
 import { useTour } from '@/app/hooks/useTour'
 import { useChapterNav } from '@/app/hooks/useChapterNav'
+import { useFileCoverage, type FileCoverage } from '@/app/hooks/useFileCoverage'
 import { useQaThreads, type QaThreads } from '@/app/hooks/useQaThreads'
 import { useReviewDrafts, type ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 import { ChapterStepper } from '@/app/components/ChapterStepper'
 import { CodePane } from '@/app/components/CodePane'
 import { DiagramPane } from '@/app/components/DiagramPane'
 import { DocsPane } from '@/app/components/DocsPane'
+import { FileMap } from '@/app/components/FileMap'
 import { GeneratingPanel } from '@/app/components/GeneratingPanel'
 import { StaleBanner } from '@/app/components/StaleBanner'
 import type { TourResult, TourStep } from '@/lib/api'
@@ -54,15 +56,19 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
     typeof tour.headRefOid === 'string' &&
     typeof tour.currentHeadRefOid === 'string' &&
     tour.headRefOid !== tour.currentHeadRefOid
+  const coverage = useFileCoverage(nav.flat)
   const jumpToStep = (stepId: string) => {
     const idx = nav.flat.findIndex((f) => f.step.id === stepId)
     if (idx >= 0) nav.goTo(idx)
   }
-  const jumpToRef = (ref: { file: string; lineStart?: number; lineEnd?: number }) => {
-    // Find the first step that pins this ref's file; if found, jump there.
-    const idx = nav.flat.findIndex((f) => f.step.code?.file === ref.file)
+  const jumpToFile = (file: string) => {
+    const idx = coverage.firstStep(file)
     if (idx >= 0) nav.goTo(idx)
   }
+  const jumpToRef = (ref: { file: string; lineStart?: number; lineEnd?: number }) => {
+    jumpToFile(ref.file)
+  }
+  const currentFile = nav.current?.step.code?.file
   return (
     <div className="flex h-full flex-col">
       {isStale && (
@@ -89,11 +95,16 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
         </Section>
         <Section title="Code / Diagram">
           {nav.current
-            ? renderCenter(nav.current.step, repo, tour, drafts, qa, jumpToStep)
+            ? renderCenter({ step: nav.current.step, repo, tour, drafts, qa, jumpToStep, jumpToFile, coverage, currentFile })
             : <PlaceholderPane>No step.</PlaceholderPane>}
         </Section>
         <Section title="Map">
-          <PlaceholderPane>File map lands in Phase 10.</PlaceholderPane>
+          <FileMap
+            files={tour.files}
+            currentFile={currentFile}
+            coverage={coverage}
+            onPick={jumpToFile}
+          />
         </Section>
       </div>
       <ChapterStepper
@@ -107,11 +118,26 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
   )
 }
 
-function renderCenter(step: TourStep, repo: string, tour: TourResult, drafts: ReviewDrafts, qa: QaThreads, onJumpToStep: (id: string) => void): JSX.Element {
+interface CenterArgs {
+  step: TourStep
+  repo: string
+  tour: TourResult
+  drafts: ReviewDrafts
+  qa: QaThreads
+  jumpToStep: (id: string) => void
+  jumpToFile: (path: string) => void
+  coverage: FileCoverage
+  currentFile?: string
+}
+
+function renderCenter(args: CenterArgs): JSX.Element {
+  const { step, repo, tour, drafts, qa, jumpToStep, jumpToFile, coverage, currentFile } = args
   return match(step.panel)
-    .with('code', () => <CodePane repo={repo} tour={tour} step={step} drafts={drafts} qa={qa} onJumpToStep={onJumpToStep} />)
+    .with('code', () => <CodePane repo={repo} tour={tour} step={step} drafts={drafts} qa={qa} onJumpToStep={jumpToStep} />)
     .with('diagram', () => <DiagramPane step={step} />)
-    .with('code-map', () => <PlaceholderPane>Code map lands in Phase 10.</PlaceholderPane>)
+    .with('code-map', () => (
+      <FileMap files={tour.files} currentFile={currentFile} coverage={coverage} onPick={jumpToFile} />
+    ))
     .with('docs', () => <PlaceholderPane>This step is docs-only.</PlaceholderPane>)
     .exhaustive()
 }
