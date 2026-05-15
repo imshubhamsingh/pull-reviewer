@@ -1,24 +1,48 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
+import { ReviewSummaryModal, type SubmitOptions } from '@/app/components/ReviewSummaryModal'
 import type { TourResult } from '@/lib/api'
 import type { ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 
 interface Props {
+  repo: string
   tour: TourResult
   drafts: ReviewDrafts
 }
 
-export function SubmitReviewButton({ tour, drafts }: Props): JSX.Element {
+const SUCCESS_TTL_MS = 8_000
+
+/**
+ * "Submit review" call-to-action. Clicking it opens a pre-submit summary
+ * modal (GitHub-style) so the reviewer sees every pending comment anchored
+ * to its code snippet before firing the network call. The actual submission
+ * only happens from inside the modal.
+ */
+export function SubmitReviewButton({ repo, tour, drafts }: Props): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
+  const [lastSubmittedUrl, setLastSubmittedUrl] = useState<string | undefined>()
+  const [reviewing, setReviewing] = useState(false)
   const count = drafts.drafts.length
 
-  const submit = async () => {
-    if (count === 0 || busy) return
+  useEffect(() => {
+    if (!lastSubmittedUrl) return
+    const id = setTimeout(() => setLastSubmittedUrl(undefined), SUCCESS_TTL_MS)
+    return () => clearTimeout(id)
+  }, [lastSubmittedUrl])
+
+  const submit = async (opts: SubmitOptions): Promise<void> => {
+    if (busy) return
     setBusy(true)
     setError(undefined)
+    setLastSubmittedUrl(undefined)
     try {
-      const result = await drafts.submit({ headSha: tour.headRefOid })
-      window.open(result.htmlUrl, '_blank', 'noopener,noreferrer')
+      const result = await drafts.submit({
+        headSha: tour.headRefOid,
+        summary: opts.summary || undefined,
+        event: opts.event,
+      })
+      setLastSubmittedUrl(result.htmlUrl)
+      setReviewing(false)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -27,17 +51,42 @@ export function SubmitReviewButton({ tour, drafts }: Props): JSX.Element {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {error && <span className="text-text-danger truncate text-xs" title={error}>{truncate(error)}</span>}
-      <button
-        type="button"
-        onClick={() => { void submit() }}
-        disabled={count === 0 || busy}
-        className="bg-interactive-primary hover:bg-interactive-primary-hover text-interactive-primary-fg rounded-sm px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {busy ? 'Submitting…' : `Submit review (${count})`}
-      </button>
-    </div>
+    <>
+      <div className="flex items-center gap-2">
+        {error && !reviewing && <span className="text-text-danger truncate text-xs" title={error}>{truncate(error)}</span>}
+        {lastSubmittedUrl && (
+          <button
+            type="button"
+            onClick={() => { window.electron.openExternal(lastSubmittedUrl) }}
+            className="text-text-secondary hover:text-text-primary text-xs underline-offset-2 transition-colors hover:underline"
+          >
+            ✓ Submitted · view on GitHub
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            setError(undefined)
+            setReviewing(true)
+          }}
+          disabled={count === 0 || busy}
+          className="bg-interactive-primary hover:bg-interactive-primary-hover text-interactive-primary-fg rounded-sm px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? 'Submitting…' : `Review (${count})`}
+        </button>
+      </div>
+      {reviewing && (
+        <ReviewSummaryModal
+          drafts={drafts.drafts}
+          repo={repo}
+          sha={tour.headRefOid}
+          submitting={busy}
+          error={error}
+          onCancel={() => { if (!busy) setReviewing(false) }}
+          onSubmit={(opts) => { submit(opts) }}
+        />
+      )}
+    </>
   )
 }
 

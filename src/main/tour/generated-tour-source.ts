@@ -52,19 +52,19 @@ export class GeneratedTourSource extends Service implements TourSource {
     return this.persist(ctx, run, chapters, settings)
   }
 
-  /** Worktree lifecycle wrapper — creates one, runs the retry loop, cleans up. */
+  /**
+   * Worktree lifecycle wrapper. We do NOT remove the worktree after generation
+   * any more — PR-scoped chat reuses it for the same head sha. The orphan
+   * sweep in WorktreeManager (24h threshold, runs on app start) handles GC.
+   */
   private async generateInsideWorktree(
     ctx: PrContext,
     settings: ResolvedSettings,
     opts: GenerateTourOptions,
   ): Promise<ParsedRun> {
     opts.onEvent?.({ type: 'phase', name: 'Preparing worktree', detail: ctx.headRefOid.slice(0, 7) })
-    const worktree = await this.clones.addWorktree(ctx.repo, ctx.headRefOid)
-    try {
-      return await this.runWithRetries(ctx, settings, opts, worktree)
-    } finally {
-      await this.cleanupWorktree(worktree)
-    }
+    const worktree = await this.clones.ensureWorktree(ctx.repo, ctx.headRefOid)
+    return this.runWithRetries(ctx, settings, opts, worktree)
   }
 
   /** Pure retry loop: each iteration delegates to attemptOnce; failures feed into the next prompt. */
@@ -135,12 +135,6 @@ export class GeneratedTourSource extends Service implements TourSource {
       type: 'phase',
       name: `Retry ${attempt}/${MAX_RETRIES}`,
       detail: truncate(lastError?.message ?? '', 100),
-    })
-  }
-
-  private async cleanupWorktree(worktree: string): Promise<void> {
-    await this.clones.removeWorktree(worktree).catch((err: Error) => {
-      this.logger.warn('Worktree cleanup failed', { worktree, err: err.message })
     })
   }
 

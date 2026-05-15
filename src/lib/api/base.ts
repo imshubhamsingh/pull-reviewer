@@ -2,7 +2,10 @@ import { buildClient, type HttpClient } from '@/lib/api/client'
 
 declare global {
   interface Window {
-    electron: { getApiPort: () => Promise<number> }
+    electron: {
+      getApiPort: () => Promise<number>
+      openExternal: (url: string) => Promise<void>
+    }
   }
 }
 

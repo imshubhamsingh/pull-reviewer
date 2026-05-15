@@ -96,6 +96,9 @@
 .shiki-block .code-line.line-hl       { background-color: hsl(270 50% 30% / 0.18); }
 .shiki-block .code-line.line-focus    { background-color: hsl(270 80% 50% / 0.22); box-shadow: inset 2px 0 0 var(--color-text-brand); }
 .shiki-block .code-line.line-selected { background-color: hsl(45 90% 50% / 0.18); }
+/* Persistent "pending comment" highlight — visible after the composer closes so
+   multi-line drafts keep their range visible across the whole selection. */
+.shiki-block .code-line.line-drafted  { background-color: hsl(35 100% 50% / 0.10); box-shadow: inset 2px 0 0 hsl(35 100% 55%); }
 .shiki-block .code-content            { white-space: pre; }
 
 /* Diagram pane: the SVG fills a wrapper whose explicit width/height is

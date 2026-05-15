@@ -37,6 +37,10 @@ export class GitCloneManager extends Service {
     return this.worktrees.add(repo, sha)
   }
 
+  ensureWorktree(repo: string, sha: string): Promise<string> {
+    return this.worktrees.ensure(repo, sha)
+  }
+
   removeWorktree(path: string): Promise<void> {
     return this.worktrees.remove(path)
   }

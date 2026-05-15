@@ -4,7 +4,7 @@ import type { Highlighter } from 'shiki'
 import { useFileSnapshot } from '@/app/hooks/useFileSnapshot'
 import { useGutterSelection } from '@/app/hooks/useGutterSelection'
 import { useShiki } from '@/app/hooks/useShiki'
-import { chooseSha, findStepForRef, highlightWindow, inferLang } from '@/app/lib/code-utils'
+import { chooseSha, highlightWindow, inferLang } from '@/app/lib/code-utils'
 import type { CodePointer, FileSnapshot, TourResult, TourStep } from '@/lib/api'
 import { CodeHeader } from '@/app/components/CodeHeader'
 import { CodeLines, type ComposerTarget } from '@/app/components/CodeLines'
@@ -18,10 +18,10 @@ interface Props {
   step: TourStep
   drafts: ReviewDrafts
   qa: QaThreads
-  onJumpToStep: (stepId: string) => void
+  onJumpToRef: (ref: CodePointer) => void
 }
 
-export function CodePane({ repo, tour, step, drafts, qa, onJumpToStep }: Props): JSX.Element {
+export function CodePane({ repo, tour, step, drafts, qa, onJumpToRef }: Props): JSX.Element {
   const code = step.code
   const sha = chooseSha(tour, code?.side)
   const snapshot = useFileSnapshot(repo, sha, code?.file)
@@ -34,7 +34,7 @@ export function CodePane({ repo, tour, step, drafts, qa, onJumpToStep }: Props):
     .with({ kind: 'loading' }, () => <EmptyPane>Loading file…</EmptyPane>)
     .with({ kind: 'error' }, ({ message }) => <EmptyPane tone="danger">{message}</EmptyPane>)
     .with({ kind: 'ready' }, ({ snap }) => (
-      <ReadyPane snap={snap} code={code} sha={sha} step={step} tour={tour} hl={hl} drafts={drafts} qa={qa} onJumpToStep={onJumpToStep} />
+      <ReadyPane snap={snap} code={code} sha={sha} step={step} hl={hl} drafts={drafts} qa={qa} onJumpToRef={onJumpToRef} />
     ))
     .exhaustive()
 }
@@ -44,14 +44,13 @@ interface ReadyPaneProps {
   code: CodePointer
   sha: string
   step: TourStep
-  tour: TourResult
   hl: Highlighter | undefined
   drafts: ReviewDrafts
   qa: QaThreads
-  onJumpToStep: (stepId: string) => void
+  onJumpToRef: (ref: CodePointer) => void
 }
 
-function ReadyPane({ snap, code, sha, step, tour, hl, drafts, qa, onJumpToStep }: ReadyPaneProps): JSX.Element {
+function ReadyPane({ snap, code, sha, step, hl, drafts, qa, onJumpToRef }: ReadyPaneProps): JSX.Element {
   const [composer, setComposer] = useState<ComposerTarget | null>(null)
   // Open the composer only on mouseup commit (after a drag / click finishes) so
   // a drag-select gesture doesn't get clobbered by a composer popping up on mousedown.
@@ -103,11 +102,10 @@ function ReadyPane({ snap, code, sha, step, tour, hl, drafts, qa, onJumpToStep }
       {step.references?.length ? (
         <References
           refs={step.references}
-          isJumpable={(ref) => findStepForRef(tour, ref) != null}
-          onClick={(ref) => {
-            const target = findStepForRef(tour, ref)
-            if (target) onJumpToStep(target.id)
-          }}
+          // Every ref is now jumpable — TourView's dispatcher falls back to a
+          // standalone read-only view when no step pins the referenced file.
+          isJumpable={() => true}
+          onClick={onJumpToRef}
         />
       ) : null}
     </div>

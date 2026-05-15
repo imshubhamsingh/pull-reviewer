@@ -19,7 +19,7 @@
 
 ## Coverage — every file appears somewhere
 - **Every file in the PR diff MUST appear in at least one step**, either as `code.file` (the file pinned to that step) OR inside some step's `references[]` (a mentioned file). No file may be silently dropped.
-- The interesting files become `code.file` of their own steps. The supporting cast — tests, lockfiles, generated assets, binaries, config tweaks — can be batched into the final chapter's steps via `references[]` (≤8 per step, so multiple steps if needed).
+- The interesting files become `code.file` of their own steps. The supporting cast — tests, lockfiles, generated assets, binaries, config tweaks — can be batched into the final chapter's steps via `references[]` (≤16 per step, so multiple steps if needed).
 - For a file you have nothing meaningful to say about (e.g., `+0/-0` binary, lockfile churn): still surface it in `references[]` of a step like "Supporting changes" so the reader knows it shifted. A one-line mention is enough.
 
 ## Step authoring — one thing per step
@@ -31,14 +31,24 @@
 
 ## Code pointers — land on the right line
 - For 'code' steps, `code.file` / `lineStart` / `lineEnd` MUST come from the diff. 1-based, inclusive.
-- **Focus lines must point at the specific identifiers, calls, or decisions the body names** — set `focusLine` (single) or `focusLines` (array, ≤5) to the line numbers where those tokens actually appear in the file. Every focus line must be inside `[lineStart, lineEnd]`.
+- **Focus lines must point at the specific identifiers, calls, or decisions the body names** — set `focusLine` (single) or `focusLines` (array, ≤10) to the line numbers where those tokens actually appear in the file. Every focus line must be inside `[lineStart, lineEnd]`.
 - `contextLines` defaults to 2; bump to 4-6 only for dense code where surrounding context really helps.
-- Use `references[]` to surface callers or related code worth knowing about even when not in the diff. ≤8 per step.
+- Use `references[]` to surface callers or related code worth knowing about even when not in the diff. ≤16 per step.
 - Never invent file paths or line numbers that don't exist in the diff.
 
 ## Diagrams
 - For 'diagram' steps, write valid Mermaid syntax. Keep diagrams under ~30 nodes — bigger than that is hard to read.
 - Prefer 'sequence' for request/call flows, 'flowchart' for control flow / decision trees, 'er' for schema relationships, 'fileGraph' for import/file relationships.
+
+## User journey — required for UI changes
+- **If the PR touches user-facing UI** (new screens, new flows, modified interactions, new buttons/forms/dialogs, navigation changes), include a dedicated **"User journey"** chapter. Place it early — after the overview docs step but before the implementation chapters — so the reviewer understands the user-visible behaviour before diving into code.
+- The chapter must contain at least one **diagram step** that visualises the journey:
+  - Use `'sequence'` for diagrams that show the user interacting with the UI and the UI making backend calls (actor: User → UI → API → DB). Best when the change is about request/response flow, auth handshakes, or multi-system interactions.
+  - Use `'flowchart'` for diagrams that show the user's decision path (click X → see Y → click Z → land at W). Best for branching UX, conditional states (empty / loading / error / success), wizards, or form validation flows.
+- The diagram's `body` must read like a guided tour: "The user clicks **Submit review**, which fires `POST /api/reviews/...`. On success they see the new badge; on failure they see the inline error and the draft list remains." Don't restate the diagram — narrate the *user-visible* consequence of each transition.
+- Follow the diagram with 1–3 `'code'` steps that pin the components / handlers driving the key transitions (e.g., the click handler, the loading state, the success/error rendering). Each step's body should answer "what does the user actually see at this moment, and what triggered it?".
+- If the PR has multiple distinct flows (e.g., onboarding + settings change), give each its own diagram step inside the same User journey chapter.
+- **Skip this chapter only when the PR has zero user-facing behaviour change** (pure refactor, backend-only change with no API contract impact, internal tooling). When in doubt, include it.
 
 ## Code-map
 - 'code-map' steps describe an *area* of the codebase at a glance — used for spatial overview, not for reading code.

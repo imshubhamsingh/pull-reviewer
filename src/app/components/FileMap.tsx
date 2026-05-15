@@ -1,5 +1,6 @@
+import { CheckSquare, Square } from 'lucide-react'
 import { match } from 'ts-pattern'
-import type { JSX } from 'react'
+import { useEffect, useRef, type JSX } from 'react'
 import { cn } from '@/app/lib/utils'
 import type { FileCoverage, FileCoverageKind } from '@/app/hooks/useFileCoverage'
 import type { PrFile } from '@/lib/api'
@@ -8,10 +9,20 @@ interface Props {
   files: PrFile[]
   currentFile?: string
   coverage: FileCoverage
+  reviewed: Set<string>
   onPick: (path: string) => void
+  onToggleReviewed: (path: string) => void
 }
 
-export function FileMap({ files, currentFile, coverage, onPick }: Props): JSX.Element {
+export function FileMap({ files, currentFile, coverage, reviewed, onPick, onToggleReviewed }: Props): JSX.Element {
+  const listRef = useRef<HTMLUListElement>(null)
+  const activeRowRef = useRef<HTMLLIElement>(null)
+
+  useEffect(() => {
+    if (!currentFile || !activeRowRef.current || !listRef.current) return
+    activeRowRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [currentFile])
+
   if (files.length === 0) {
     return (
       <div className="text-text-muted flex h-full items-center justify-center p-4 text-center text-xs">
@@ -20,19 +31,24 @@ export function FileMap({ files, currentFile, coverage, onPick }: Props): JSX.El
     )
   }
   return (
-    <ul className="h-full overflow-y-auto py-1">
-      {files.map((f) => (
-        <li key={f.path}>
-          <FileRow
-            file={f}
-            active={f.path === currentFile}
-            kind={coverage.kind(f.path)}
-            chapter={coverage.firstChapter(f.path)}
-            chapterIdx={coverage.firstChapterIdx(f.path)}
-            onPick={onPick}
-          />
-        </li>
-      ))}
+    <ul ref={listRef} className="h-full overflow-y-auto py-1">
+      {files.map((f) => {
+        const active = f.path === currentFile
+        return (
+          <li key={f.path} ref={active ? activeRowRef : undefined}>
+            <FileRow
+              file={f}
+              active={active}
+              kind={coverage.kind(f.path)}
+              chapter={coverage.firstChapter(f.path)}
+              chapterIdx={coverage.firstChapterIdx(f.path)}
+              reviewed={reviewed.has(f.path)}
+              onPick={onPick}
+              onToggleReviewed={onToggleReviewed}
+            />
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -43,37 +59,54 @@ interface RowProps {
   kind: FileCoverageKind
   chapter: string | undefined
   chapterIdx: number | undefined
+  reviewed: boolean
   onPick: (path: string) => void
+  onToggleReviewed: (path: string) => void
 }
 
-function FileRow({ file, active, kind, chapter, chapterIdx, onPick }: RowProps): JSX.Element {
-  const jumpable = kind !== 'uncovered'
+function FileRow({ file, active, kind, chapter, chapterIdx, reviewed, onPick, onToggleReviewed }: RowProps): JSX.Element {
   return (
-    <button
-      type="button"
-      disabled={!jumpable}
-      onClick={() => onPick(file.path)}
-      title={tooltipFor(file.path, kind, chapter)}
+    <div
       className={cn(
-        'flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left text-xs transition-colors',
+        'flex w-full items-center gap-2 border-l-2 pl-3 pr-2 py-1.5 text-xs transition-colors',
         active
           ? 'border-text-brand bg-surface-hover text-text-primary'
           : 'border-transparent',
-        !active && kind === 'pinned' && 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
-        !active && kind === 'referenced' && 'text-text-secondary/80 hover:bg-surface-hover hover:text-text-primary italic',
-        !active && kind === 'uncovered' && 'text-text-muted cursor-default opacity-60',
+        !active && kind === 'pinned' && 'text-text-secondary hover:bg-surface-hover',
+        !active && kind === 'referenced' && 'text-text-secondary/80 hover:bg-surface-hover italic',
+        !active && kind === 'uncovered' && 'text-text-muted hover:bg-surface-hover opacity-70',
+        reviewed && !active && 'opacity-50',
       )}
     >
-      <CoverageDot kind={kind} active={active} />
-      <PathLabel path={file.path} />
-      <ChapterBadge idx={chapterIdx} kind={kind} />
-      <DiffCount additions={file.additions} deletions={file.deletions} />
-    </button>
+      <button
+        type="button"
+        onClick={() => onPick(file.path)}
+        title={tooltipFor(file.path, kind, chapter, reviewed)}
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+      >
+        <CoverageDot kind={kind} active={active} />
+        <PathLabel path={file.path} />
+        <ChapterBadge idx={chapterIdx} kind={kind} />
+        <DiffCount additions={file.additions} deletions={file.deletions} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onToggleReviewed(file.path)}
+        aria-pressed={reviewed}
+        aria-label={reviewed ? 'Mark file unreviewed' : 'Mark file reviewed'}
+        title={reviewed ? 'Reviewed (click to unmark)' : 'Mark file reviewed'}
+        className={cn(
+          'flex shrink-0 items-center transition-colors',
+          reviewed ? 'text-green-400 hover:text-green-300' : 'text-text-muted/70 hover:text-text-primary',
+        )}
+      >
+        {reviewed ? <CheckSquare size={12} aria-hidden /> : <Square size={12} aria-hidden />}
+      </button>
+    </div>
   )
 }
 
 function CoverageDot({ kind, active }: { kind: FileCoverageKind; active: boolean }): JSX.Element {
-  // Pinned and referenced both look "in the tour" — solid bullet. Only uncovered is hollow.
   const className = match(kind)
     .with('pinned', () => active ? 'text-text-brand' : 'text-text-secondary')
     .with('referenced', () => 'text-text-secondary/70')
@@ -124,10 +157,11 @@ function DiffCount({ additions, deletions }: { additions: number; deletions: num
   )
 }
 
-function tooltipFor(path: string, kind: FileCoverageKind, chapter: string | undefined): string {
-  return match(kind)
+function tooltipFor(path: string, kind: FileCoverageKind, chapter: string | undefined, reviewed: boolean): string {
+  const base = match(kind)
     .with('pinned', () => chapter ? `${path}\nPinned in: ${chapter}` : path)
     .with('referenced', () => chapter ? `${path}\nReferenced in: ${chapter}` : path)
-    .with('uncovered', () => `${path}\nNot covered by the tour`)
+    .with('uncovered', () => `${path}\nNot covered by the tour — click to open standalone`)
     .exhaustive()
+  return reviewed ? `${base}\n· Reviewed` : base
 }

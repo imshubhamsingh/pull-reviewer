@@ -1,6 +1,9 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useMemo, useState, type JSX } from 'react'
 import type { TourChapter, TourResult } from '@/lib/api'
+import type { ChapterCompletionsState } from '@/app/hooks/useChapterCompletions'
 import type { ChapterNav } from '@/app/hooks/useChapterNav'
+import type { FileCoverage } from '@/app/hooks/useFileCoverage'
+import type { FileReviewsState } from '@/app/hooks/useFileReviews'
 import type { ReviewDrafts } from '@/app/hooks/useReviewDrafts'
 import { ChapterRow } from '@/app/components/ChapterRow'
 import { SubmitReviewButton } from '@/app/components/SubmitReviewButton'
@@ -11,9 +14,23 @@ interface Props {
   tour: TourResult
   drafts: ReviewDrafts
   onRegenerate: () => void
+  repo: string
+  completions: ChapterCompletionsState
+  fileReviews: FileReviewsState
+  coverage: FileCoverage
 }
 
-export function ChapterStepper({ chapters, nav, tour, drafts, onRegenerate }: Props): JSX.Element {
+export function ChapterStepper({
+  chapters,
+  nav,
+  tour,
+  drafts,
+  onRegenerate,
+  repo,
+  completions,
+  fileReviews,
+  coverage,
+}: Props): JSX.Element {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set([0]))
   const activeChapter = nav.current?.chapterIdx
 
@@ -31,6 +48,33 @@ export function ChapterStepper({ chapters, nav, tour, drafts, onRegenerate }: Pr
     })
   }
 
+  /**
+   * Marking-or-unmarking a chapter. The unmark path does NOT cascade — file
+   * reviews are preserved so the user keeps their explicit progress even when
+   * they revisit a chapter. The mark path bulk-ticks the chapter's pinned
+   * files and auto-advances to the next chapter's first step.
+   */
+  const handleToggleChapter = async (chapterId: string): Promise<void> => {
+    const wasComplete = completions.isComplete(chapterId)
+    await completions.toggle(chapterId)
+    if (wasComplete) return // un-marking: no cascade, no advance
+    const chapterIdx = chapters.findIndex((c) => c.id === chapterId)
+    if (chapterIdx < 0) return
+    const pinned = coverage.pinnedFilesIn(chapterIdx)
+    if (pinned.length > 0) await fileReviews.markMany(pinned)
+    const firstStepOfNext = nav.flat.findIndex((f) => f.chapterIdx === chapterIdx + 1)
+    if (firstStepOfNext >= 0) nav.goTo(firstStepOfNext)
+  }
+
+  const completedCount = useMemo(
+    () => chapters.filter((c) => completions.isComplete(c.id)).length,
+    [chapters, completions],
+  )
+  const reviewedCount = useMemo(
+    () => tour.files.filter((f) => fileReviews.isReviewed(f.path)).length,
+    [tour.files, fileReviews],
+  )
+
   return (
     <div className="border-border bg-bg flex flex-col border-t">
       <ul className="max-h-64 overflow-y-auto">
@@ -41,11 +85,23 @@ export function ChapterStepper({ chapters, nav, tour, drafts, onRegenerate }: Pr
             chapterIdx={i}
             nav={nav}
             expanded={expanded.has(i)}
+            completed={completions.isComplete(chapter.id)}
             onToggle={() => toggle(i)}
+            onToggleComplete={(id) => { handleToggleChapter(id) }}
           />
         ))}
       </ul>
-      <NavBar nav={nav} tour={tour} drafts={drafts} onRegenerate={onRegenerate} />
+      <NavBar
+        nav={nav}
+        tour={tour}
+        drafts={drafts}
+        onRegenerate={onRegenerate}
+        repo={repo}
+        completedChapters={completedCount}
+        totalChapters={chapters.length}
+        reviewedFiles={reviewedCount}
+        totalFiles={tour.files.length}
+      />
     </div>
   )
 }
@@ -55,9 +111,24 @@ interface NavBarProps {
   tour: TourResult
   drafts: ReviewDrafts
   onRegenerate: () => void
+  repo: string
+  completedChapters: number
+  totalChapters: number
+  reviewedFiles: number
+  totalFiles: number
 }
 
-function NavBar({ nav, tour, drafts, onRegenerate }: NavBarProps): JSX.Element {
+function NavBar({
+  nav,
+  tour,
+  drafts,
+  onRegenerate,
+  repo,
+  completedChapters,
+  totalChapters,
+  reviewedFiles,
+  totalFiles,
+}: NavBarProps): JSX.Element {
   return (
     <div className="border-border bg-surface flex items-center justify-between gap-4 border-t px-4 py-2">
       <div className="flex gap-2">
@@ -71,9 +142,12 @@ function NavBar({ nav, tour, drafts, onRegenerate }: NavBarProps): JSX.Element {
             (Chapter {nav.current.chapterIdx + 1}: {nav.current.chapter.title})
           </span>
         )}
+        <span className="text-text-muted ml-2">
+          · {completedChapters}/{totalChapters} chapters · {reviewedFiles}/{totalFiles} files reviewed
+        </span>
       </p>
       <div className="flex items-center gap-3">
-        <SubmitReviewButton tour={tour} drafts={drafts} />
+        <SubmitReviewButton repo={repo} tour={tour} drafts={drafts} />
         <button
           type="button"
           onClick={onRegenerate}

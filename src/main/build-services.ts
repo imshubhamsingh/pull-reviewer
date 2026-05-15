@@ -1,6 +1,13 @@
 import { AuthService } from '@/main/auth/auth.service'
+import { ChatPromptBuilder } from '@/main/chat/chat-prompt.builder'
+import { ChatRouter } from '@/main/chat/chat.router'
+import { ChatService } from '@/main/chat/chat.service'
+import { PrChatStore } from '@/main/chat/chat.store'
 import { DatabaseService } from '@/main/db/database.service'
+import { SettingsRouter } from '@/main/settings/settings.router'
+import { SettingsStore } from '@/main/settings/settings.store'
 import { GitHubCliService } from '@/main/github/github-cli.service'
+import { PrRecentStore } from '@/main/github/pr-recent.store'
 import { PullRequestRouter } from '@/main/github/pull-request.router'
 import { PullRequestService } from '@/main/github/pull-request.service'
 import { FileRouter } from '@/main/files/file.router'
@@ -20,12 +27,17 @@ import { ReviewRouter } from '@/main/reviews/review.router'
 import { ReviewService } from '@/main/reviews/review.service'
 import { ReviewSubmitter } from '@/main/reviews/review.submitter'
 import { CachedTourSource } from '@/main/tour/cached-tour-source'
+import { ChapterCompletionService } from '@/main/tour/chapter-completion.service'
+import { ChapterCompletionStore } from '@/main/tour/chapter-completion.store'
 import { CliRunnerService } from '@/main/tour/cli-runner.service'
+import { FileReviewService } from '@/main/tour/file-review.service'
+import { FileReviewStore } from '@/main/tour/file-review.store'
 import { GeneratedTourSource } from '@/main/tour/generated-tour-source'
 import { HeadShaResolver } from '@/main/tour/head-sha-resolver'
 import { ModelCatalog } from '@/main/tour/model-catalog'
 import { PrContextCollector } from '@/main/tour/pr-context.collector'
 import { PromptBuilder } from '@/main/tour/prompt.builder'
+import { ReviewProgressRouter } from '@/main/tour/review-progress.router'
 import { TourParser } from '@/main/tour/tour.parser'
 import { TourRouter } from '@/main/tour/tour.router'
 import { TourService } from '@/main/tour/tour.service'
@@ -41,12 +53,17 @@ export interface Services {
   files: FileSnapshotService
   reviews: ReviewService
   explain: ExplainService
+  chats: ChatService
+  settings: SettingsStore
   routers: {
     pullRequests: PullRequestRouter
     tours: TourRouter
     files: FileRouter
     reviews: ReviewRouter
     explain: ExplainRouter
+    chats: ChatRouter
+    settings: SettingsRouter
+    reviewProgress: ReviewProgressRouter
   }
 }
 
@@ -54,7 +71,8 @@ export function buildServices(): Services {
   const db = new DatabaseService()
   const auth = new AuthService()
   const github = new GitHubCliService()
-  const pullRequests = new PullRequestService(auth)
+  const prRecents = new PrRecentStore(db.query)
+  const pullRequests = new PullRequestService(auth, prRecents)
 
   const collector = new PrContextCollector(github)
   const promptBuilder = new PromptBuilder()
@@ -84,6 +102,16 @@ export function buildServices(): Services {
   const qaStore = new QaThreadStore(db.query)
   const explain = new ExplainService(files, qaStore, cli)
 
+  const settings = new SettingsStore(db.query)
+  const chatStore = new PrChatStore(db.query)
+  const chatPromptBuilder = new ChatPromptBuilder()
+  const chats = new ChatService(chatStore, settings, collector, tourStore, clones, cli, models, chatPromptBuilder)
+
+  const chapterCompletionStore = new ChapterCompletionStore(db.query)
+  const chapterCompletions = new ChapterCompletionService(chapterCompletionStore)
+  const fileReviewStore = new FileReviewStore(db.query)
+  const fileReviews = new FileReviewService(fileReviewStore)
+
   return {
     db,
     auth,
@@ -94,12 +122,17 @@ export function buildServices(): Services {
     files,
     reviews,
     explain,
+    chats,
+    settings,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),
       tours: new TourRouter(tours),
       files: new FileRouter(files),
       reviews: new ReviewRouter(reviews),
       explain: new ExplainRouter(explain),
+      chats: new ChatRouter(chats),
+      settings: new SettingsRouter(settings),
+      reviewProgress: new ReviewProgressRouter(chapterCompletions, fileReviews),
     },
   }
 }

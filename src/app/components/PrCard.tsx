@@ -7,7 +7,7 @@ import type { PullRequestSummary, ReviewDecision } from '@/lib/api'
 
 interface Props {
   pr: PullRequestSummary
-  context: 'mine' | 'review'
+  context: 'mine' | 'review' | 'reviewed' | 'recents'
   onOpen: (pr: PullRequestSummary) => void
 }
 
@@ -54,7 +54,7 @@ function MetaRow({ pr }: { pr: PullRequestSummary }): JSX.Element {
   )
 }
 
-function BadgeRow({ pr, context }: { pr: PullRequestSummary; context: 'mine' | 'review' }): JSX.Element | null {
+function BadgeRow({ pr, context }: { pr: PullRequestSummary; context: 'mine' | 'review' | 'reviewed' | 'recents' }): JSX.Element | null {
   const badges: JSX.Element[] = []
 
   // For "how long has this been waiting on me", `updatedAt` is the right
@@ -81,8 +81,22 @@ function BadgeRow({ pr, context }: { pr: PullRequestSummary; context: 'mine' | '
     if (decisionBadge) badges.push(decisionBadge)
   }
 
+  // Reviewed + Recents tabs show open/closed/merged state so the user can
+  // tell at a glance whether the PR is still live or already shipped.
+  if (context === 'reviewed' || context === 'recents') {
+    badges.push(<StateBadge key="state" state={pr.state} />)
+  }
+
   if (badges.length === 0) return null
   return <div className="mt-2 flex flex-wrap gap-1.5">{badges}</div>
+}
+
+function StateBadge({ state }: { state: PullRequestSummary['state'] }): JSX.Element {
+  return match(state)
+    .with('OPEN', () => <Badge key="state" tone="brand">Open</Badge>)
+    .with('MERGED', () => <Badge key="state" tone="success">Merged</Badge>)
+    .with('CLOSED', () => <Badge key="state" tone="neutral">Closed</Badge>)
+    .exhaustive()
 }
 
 function renderDecision(decision: ReviewDecision, updatedAt: string | undefined): JSX.Element | null {

@@ -17,7 +17,7 @@ type TourStep = {
   title:       string                                                // <80 chars
   body:        string                                                // markdown, 1-3 short paragraphs
   code?:       CodePointer                                           // required when panel === 'code'
-  references?: CodePointer[]                                         // <=8 callers/related code worth surfacing
+  references?: CodePointer[]                                         // <=16 callers/related code worth surfacing
   diagram?:    { kind: 'sequence' | 'flowchart' | 'er' | 'class' | 'fileGraph', mermaid: string }  // required when panel === 'diagram'
 }
 
@@ -27,7 +27,7 @@ type CodePointer = {
   lineStart?:    number                                              // 1-based, inclusive
   lineEnd?:      number                                              // 1-based, inclusive
   focusLine?:    number                                              // single line to center on — the call or decision (defaults to lineStart)
-  focusLines?:   number[]                                            // up to 5 lines to emphasise when narration calls out multiple spots
+  focusLines?:   number[]                                            // up to 10 lines to emphasise when narration calls out multiple spots
   contextLines?: number                                              // extra buffer above/below; renderer hint, defaults to 2
 }
 

@@ -7,7 +7,9 @@ import { Service } from '@/main/service'
 
 const WORKTREE_DIR = 'worktrees'
 const TOUR_PREFIX = 'code-tour'
-const ORPHAN_THRESHOLD_MS = 60 * 60 * 1000   // 1h: anything older was abandoned
+// Worktrees now persist past tour generation so PR-scoped chat can reuse them.
+// Bump from 1h to 24h so users hit "worktree exists" on a same-day return visit.
+const ORPHAN_THRESHOLD_MS = 24 * 60 * 60 * 1000
 
 /**
  * Manages temporary worktrees of a sha. Each tour generation gets its own
@@ -40,6 +42,20 @@ export class WorktreeManager extends Service {
     // already registered".
     await this.git.ok(['worktree', 'prune'], { cwd: bare })
     await this.git.run(['worktree', 'add', '--detach', wt, sha], { cwd: bare })
+    return wt
+  }
+
+  /**
+   * Idempotent — returns the path of an existing worktree at the sha, or
+   * creates one if none exists. Bumps the directory's mtime so the orphan
+   * sweep doesn't reap a worktree that's still actively in use.
+   */
+  async ensure(repo: string, sha: string): Promise<string> {
+    const wt = this.pathFor(repo, sha)
+    const exists = await fs.stat(wt).then((s) => s.isDirectory()).catch(() => false)
+    if (!exists) return this.add(repo, sha)
+    const now = new Date()
+    await fs.utimes(wt, now, now).catch(() => { /* mtime bump is best-effort */ })
     return wt
   }
 

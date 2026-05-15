@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import { IPC } from '@/lib/ipc/channels'
 import { logger } from '@/lib/logger'
@@ -26,6 +26,13 @@ async function createWindow(): Promise<void> {
     },
   })
 
+  // Any `target="_blank"` link or `window.open(url)` from the renderer routes
+  // to the system default browser instead of spawning a child Electron window.
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     await window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
   } else {
@@ -35,11 +42,18 @@ async function createWindow(): Promise<void> {
   }
 }
 
+function isExternalUrl(url: string): boolean {
+  return url.startsWith('http://') || url.startsWith('https://')
+}
+
 app.whenReady().then(async () => {
   services = buildServices()
   apiServer = await startApiServer(services)
 
   ipcMain.handle(IPC.GetApiPort, () => apiServer?.port ?? 0)
+  ipcMain.handle(IPC.OpenExternal, async (_event, url: unknown) => {
+    if (typeof url === 'string' && isExternalUrl(url)) await shell.openExternal(url)
+  })
 
   // Best-effort cleanup of worktrees left behind by crashed prior runs.
   services.clones.sweepOrphans().catch((err: Error) => {

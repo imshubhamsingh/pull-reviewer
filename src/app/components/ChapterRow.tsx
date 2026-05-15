@@ -1,3 +1,4 @@
+import { CheckSquare, Square } from 'lucide-react'
 import type { JSX } from 'react'
 import { cn } from '@/app/lib/utils'
 import type { ChapterCritique, TourChapter } from '@/lib/api'
@@ -8,25 +9,39 @@ interface Props {
   chapterIdx: number
   nav: ChapterNav
   expanded: boolean
+  completed: boolean
   onToggle: () => void
+  onToggleComplete: (chapterId: string) => void
 }
 
-export function ChapterRow({ chapter, chapterIdx, nav, expanded, onToggle }: Props): JSX.Element {
+export function ChapterRow({ chapter, chapterIdx, nav, expanded, completed, onToggle, onToggleComplete }: Props): JSX.Element {
   return (
     <li className="border-border border-b last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="hover:bg-surface-hover/40 flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors"
-      >
-        <div className="flex min-w-0 items-baseline gap-2">
+      <div className="hover:bg-surface-hover/40 flex w-full items-center gap-2 px-4 py-2 transition-colors">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-baseline gap-2 text-left"
+        >
           <span aria-hidden className={cn('text-text-muted text-[10px] transition-transform', expanded ? 'rotate-90' : '')}>▸</span>
           <span className="text-text-muted text-[10px] tracking-wider uppercase">Ch {chapterIdx + 1}</span>
-          <span className="text-text-primary truncate text-sm font-medium">{chapter.title}</span>
+          <span className={cn('truncate text-sm font-medium', completed ? 'text-text-secondary line-through' : 'text-text-primary')}>{chapter.title}</span>
           {chapter.summary && <span className="text-text-muted truncate text-xs">— {chapter.summary}</span>}
-        </div>
+        </button>
         {chapter.critique && <CritiqueBadge critique={chapter.critique} />}
-      </button>
+        <button
+          type="button"
+          onClick={() => onToggleComplete(chapter.id)}
+          aria-pressed={completed}
+          aria-label={completed ? 'Mark chapter incomplete' : 'Mark chapter complete'}
+          className={cn(
+            'flex shrink-0 items-center transition-colors',
+            completed ? 'text-green-400 hover:text-green-300' : 'text-text-muted hover:text-text-primary',
+          )}
+        >
+          {completed ? <CheckSquare size={14} aria-hidden /> : <Square size={14} aria-hidden />}
+        </button>
+      </div>
       {expanded && <StepList chapter={chapter} chapterIdx={chapterIdx} nav={nav} />}
     </li>
   )

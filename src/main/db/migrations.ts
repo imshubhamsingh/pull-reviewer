@@ -6,6 +6,11 @@ import * as m20260512200401TourCostTracking from '@/main/db/migrations/202605122
 import * as m20260512220000ReviewDrafts from '@/main/db/migrations/20260512220000-review-drafts'
 import * as m20260512230000ReviewDraftRange from '@/main/db/migrations/20260512230000-review-draft-range'
 import * as m20260513000000QaThreads from '@/main/db/migrations/20260513000000-qa-threads'
+import * as m20260514000000PrChats from '@/main/db/migrations/20260514000000-pr-chats'
+import * as m20260514000001Settings from '@/main/db/migrations/20260514000001-settings'
+import * as m20260515000000PrRecents from '@/main/db/migrations/20260515000000-pr-recents'
+import * as m20260516000000ChapterCompletions from '@/main/db/migrations/20260516000000-chapter-completions'
+import * as m20260516000001FileReviews from '@/main/db/migrations/20260516000001-file-reviews'
 
 interface Migration {
   id: string
@@ -23,6 +28,11 @@ const MIGRATIONS: Migration[] = [
   m20260512220000ReviewDrafts,
   m20260512230000ReviewDraftRange,
   m20260513000000QaThreads,
+  m20260514000000PrChats,
+  m20260514000001Settings,
+  m20260515000000PrRecents,
+  m20260516000000ChapterCompletions,
+  m20260516000001FileReviews,
 ]
 
 export function applyMigrations(db: Db, logger: Logger): void {

@@ -83,23 +83,27 @@ function useElapsed(): number {
   return now - start
 }
 
-/** Latest partial_text from the model, cleaned for single-line display. */
+/**
+ * Live "thinking" line — shows the tail of the model's prose narration, not
+ * the structured JSON output. Once the model starts the array/object that
+ * carries the actual tour (per rules.md, this comes AFTER 1-3 sentences of
+ * plain plan), we stop appending to the thinking display.
+ *
+ * Implementation: accumulate every partial_text fragment in order, drop
+ * everything from the first `[` or `{` onward, return the tail of what
+ * remains. So you see the model's most recent prose, never the JSON.
+ */
 function latestThinking(events: TourStreamEvent[]): string | undefined {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e && e.event === 'partial_text') {
-      const cleaned = cleanFragment(e.data.text)
-      if (cleaned) return cleaned
-    }
+  let acc = ''
+  for (const e of events) {
+    if (e.event === 'partial_text') acc += e.data.text
   }
-  return undefined
-}
-
-function cleanFragment(text: string): string {
-  // Collapse newlines, strip leading JSON punctuation that's pure noise on its own.
-  const single = text.replace(/\s+/g, ' ').trim()
-  if (single.length < 2) return ''
-  return single.length > 120 ? single.slice(0, 119) + '…' : single
+  if (!acc) return undefined
+  const jsonStart = acc.search(/[[{]/)
+  const prose = (jsonStart >= 0 ? acc.slice(0, jsonStart) : acc).trim()
+  if (prose.length < 2) return undefined
+  const collapsed = prose.replace(/\s+/g, ' ')
+  return collapsed.length > 120 ? '… ' + collapsed.slice(-119) : collapsed
 }
 
 function latestPhase(events: TourStreamEvent[]): Phase {

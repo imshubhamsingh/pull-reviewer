@@ -174,3 +174,68 @@ export interface AskAiInput {
   question: string
   model?: string
 }
+
+/**
+ * Click-to-jump pointer the chat assistant emits next to its markdown answer.
+ * Same shape as `CodePointer` minus the diff-side / focus fields — chat refs
+ * aren't tied to a specific side of the diff.
+ */
+export interface CodeRef {
+  file: string
+  lineStart: number
+  lineEnd?: number
+}
+
+export type ChatMessageRole = 'user' | 'assistant'
+export type ChatMessageStatus = 'streaming' | 'complete' | 'interrupted' | 'error'
+
+export interface PrChat {
+  id: number
+  repo: string
+  prNumber: number
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PrChatMessage {
+  id: number
+  chatId: number
+  role: ChatMessageRole
+  body: string
+  references: CodeRef[] | null
+  status: ChatMessageStatus
+  model: string | null
+  createdAt: string
+}
+
+/**
+ * App-wide settings. Each known key has a typed accessor so call sites stay
+ * safe even though the backend persists JSON-encoded values.
+ *
+ * - `chatHistoryBudget` — how many user+assistant pairs the chat service
+ *   replays per send. `null` means "send everything", an integer means
+ *   "last N pairs".
+ */
+export interface AppSettings {
+  chatHistoryBudget: number | null
+}
+
+/** Review-progress signals — chapter completions and per-file reviewed flags. */
+export interface ChapterCompletion {
+  id: number
+  repo: string
+  prNumber: number
+  headRefOid: string
+  chapterId: string
+  completedAt: string
+}
+
+export interface FileReview {
+  id: number
+  repo: string
+  prNumber: number
+  headRefOid: string
+  filePath: string
+  reviewedAt: string
+}

@@ -1,0 +1,267 @@
+import type { Db } from '@/main/db/db'
+import { Service } from '@/main/service'
+
+export interface CodeRef {
+  file: string
+  lineStart: number
+  lineEnd?: number
+}
+
+export type ChatMessageRole = 'user' | 'assistant'
+export type ChatMessageStatus = 'streaming' | 'complete' | 'interrupted' | 'error'
+
+export interface PrChatRecord {
+  id: number
+  repo: string
+  prNumber: number
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PrChatMessageRecord {
+  id: number
+  chatId: number
+  role: ChatMessageRole
+  body: string
+  references: CodeRef[] | null
+  status: ChatMessageStatus
+  model: string | null
+  createdAt: string
+}
+
+export interface AppendMessageInput {
+  chatId: number
+  role: ChatMessageRole
+  body: string
+  references?: CodeRef[] | null
+  status?: ChatMessageStatus
+  model?: string | null
+}
+
+export interface UpdateMessageInput {
+  body?: string
+  references?: CodeRef[] | null
+  status?: ChatMessageStatus
+  model?: string | null
+}
+
+interface ChatRow {
+  id: number
+  repo: string
+  pr_number: number
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+interface MessageRow {
+  id: number
+  chat_id: number
+  role: ChatMessageRole
+  body: string
+  references_json: string | null
+  status: ChatMessageStatus
+  model: string | null
+  created_at: string
+}
+
+const CHAT_COLUMNS = 'id, repo, pr_number, title, created_at, updated_at'
+const MESSAGE_COLUMNS = 'id, chat_id, role, body, references_json, status, model, created_at'
+
+export class PrChatStore extends Service {
+  constructor(private readonly db: Db) {
+    super()
+  }
+
+  listChats(repo: string, prNumber: number): PrChatRecord[] {
+    const rows = this.db.select<ChatRow>(
+      /* sql */ `
+        SELECT ${CHAT_COLUMNS}
+          FROM pr_chats
+         WHERE repo = ?
+           AND pr_number = ?
+         ORDER BY updated_at DESC, id DESC
+      `,
+      [repo, prNumber],
+    )
+    return rows.map(toChatRecord)
+  }
+
+  findChat(id: number): PrChatRecord | undefined {
+    const row = this.db.selectOne<ChatRow>(
+      /* sql */ `SELECT ${CHAT_COLUMNS} FROM pr_chats WHERE id = ?`,
+      [id],
+    )
+    return row ? toChatRecord(row) : undefined
+  }
+
+  createChat(repo: string, prNumber: number, title: string): PrChatRecord {
+    const now = new Date().toISOString()
+    const result = this.db.insert(
+      /* sql */ `
+        INSERT INTO pr_chats (repo, pr_number, title, created_at, updated_at)
+        VALUES (@repo, @prNumber, @title, @now, @now)
+      `,
+      { repo, prNumber, title, now },
+    )
+    const id = Number(result.lastInsertRowid)
+    return { id, repo, prNumber, title, createdAt: now, updatedAt: now }
+  }
+
+  renameChat(id: number, title: string): PrChatRecord | undefined {
+    const now = new Date().toISOString()
+    this.db.update(
+      /* sql */ `UPDATE pr_chats SET title = ?, updated_at = ? WHERE id = ?`,
+      [title, now, id],
+    )
+    return this.findChat(id)
+  }
+
+  touchChat(id: number): void {
+    const now = new Date().toISOString()
+    this.db.update(
+      /* sql */ `UPDATE pr_chats SET updated_at = ? WHERE id = ?`,
+      [now, id],
+    )
+  }
+
+  deleteChat(id: number): boolean {
+    const { changes } = this.db.delete(
+      /* sql */ `DELETE FROM pr_chats WHERE id = ?`,
+      [id],
+    )
+    return changes > 0
+  }
+
+  listMessages(chatId: number): PrChatMessageRecord[] {
+    const rows = this.db.select<MessageRow>(
+      /* sql */ `
+        SELECT ${MESSAGE_COLUMNS}
+          FROM pr_chat_messages
+         WHERE chat_id = ?
+         ORDER BY id ASC
+      `,
+      [chatId],
+    )
+    return rows.map(toMessageRecord)
+  }
+
+  appendMessage(input: AppendMessageInput): PrChatMessageRecord {
+    const now = new Date().toISOString()
+    const refs = input.references ?? null
+    const result = this.db.insert(
+      /* sql */ `
+        INSERT INTO pr_chat_messages
+          (chat_id, role, body, references_json, status, model, created_at)
+        VALUES
+          (@chatId, @role, @body, @referencesJson, @status, @model, @now)
+      `,
+      {
+        chatId: input.chatId,
+        role: input.role,
+        body: input.body,
+        referencesJson: refs ? JSON.stringify(refs) : null,
+        status: input.status ?? 'complete',
+        model: input.model ?? null,
+        now,
+      },
+    )
+    return {
+      id: Number(result.lastInsertRowid),
+      chatId: input.chatId,
+      role: input.role,
+      body: input.body,
+      references: refs,
+      status: input.status ?? 'complete',
+      model: input.model ?? null,
+      createdAt: now,
+    }
+  }
+
+  updateMessage(id: number, fields: UpdateMessageInput): PrChatMessageRecord | undefined {
+    const sets: string[] = []
+    const params: Record<string, unknown> = { id }
+    if (fields.body !== undefined) { sets.push('body = @body'); params.body = fields.body }
+    if (fields.references !== undefined) {
+      sets.push('references_json = @referencesJson')
+      params.referencesJson = fields.references ? JSON.stringify(fields.references) : null
+    }
+    if (fields.status !== undefined) { sets.push('status = @status'); params.status = fields.status }
+    if (fields.model !== undefined) { sets.push('model = @model'); params.model = fields.model }
+    if (sets.length === 0) return this.findMessage(id)
+    this.db.update(
+      /* sql */ `UPDATE pr_chat_messages SET ${sets.join(', ')} WHERE id = @id`,
+      params,
+    )
+    return this.findMessage(id)
+  }
+
+  findMessage(id: number): PrChatMessageRecord | undefined {
+    const row = this.db.selectOne<MessageRow>(
+      /* sql */ `SELECT ${MESSAGE_COLUMNS} FROM pr_chat_messages WHERE id = ?`,
+      [id],
+    )
+    return row ? toMessageRecord(row) : undefined
+  }
+
+  deleteMessage(id: number): boolean {
+    const { changes } = this.db.delete(
+      /* sql */ `DELETE FROM pr_chat_messages WHERE id = ?`,
+      [id],
+    )
+    return changes > 0
+  }
+
+  countUserMessages(chatId: number): number {
+    const row = this.db.selectOne<{ n: number }>(
+      /* sql */ `SELECT COUNT(*) AS n FROM pr_chat_messages WHERE chat_id = ? AND role = 'user'`,
+      [chatId],
+    )
+    return row?.n ?? 0
+  }
+}
+
+function toChatRecord(row: ChatRow): PrChatRecord {
+  return {
+    id: row.id,
+    repo: row.repo,
+    prNumber: row.pr_number,
+    title: row.title,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toMessageRecord(row: MessageRow): PrChatMessageRecord {
+  return {
+    id: row.id,
+    chatId: row.chat_id,
+    role: row.role,
+    body: row.body,
+    references: parseRefs(row.references_json),
+    status: row.status,
+    model: row.model,
+    createdAt: row.created_at,
+  }
+}
+
+function parseRefs(json: string | null): CodeRef[] | null {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!Array.isArray(parsed)) return null
+    return parsed.filter(isCodeRef)
+  } catch {
+    return null
+  }
+}
+
+function isCodeRef(value: unknown): value is CodeRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as CodeRef).file === 'string' &&
+    typeof (value as CodeRef).lineStart === 'number'
+  )
+}

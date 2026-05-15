@@ -12,6 +12,8 @@ export interface FileCoverage {
   firstChapter: (path: string) => string | undefined
   /** 1-based chapter number where the file first appears (for "ch N" badges). undefined if uncovered. */
   firstChapterIdx: (path: string) => number | undefined
+  /** Files appearing as `step.code.file` for steps within this chapter index. Refs excluded. */
+  pinnedFilesIn: (chapterIdx: number) => string[]
 }
 
 export function useFileCoverage(flat: FlatStep[]): FileCoverage {
@@ -21,9 +23,16 @@ export function useFileCoverage(flat: FlatStep[]): FileCoverage {
 function buildCoverage(flat: FlatStep[]): FileCoverage {
   const pinnedAt = new Map<string, number>()
   const referencedAt = new Map<string, number>()
+  // chapterIdx → set of distinct pinned file paths in that chapter
+  const pinnedByChapter = new Map<number, Set<string>>()
   flat.forEach((f, idx) => {
     const code = f.step.code?.file
-    if (code && !pinnedAt.has(code)) pinnedAt.set(code, idx)
+    if (code) {
+      if (!pinnedAt.has(code)) pinnedAt.set(code, idx)
+      let bucket = pinnedByChapter.get(f.chapterIdx)
+      if (!bucket) { bucket = new Set(); pinnedByChapter.set(f.chapterIdx, bucket) }
+      bucket.add(code)
+    }
     f.step.references?.forEach((r) => {
       if (!referencedAt.has(r.file)) referencedAt.set(r.file, idx)
     })
@@ -45,6 +54,10 @@ function buildCoverage(flat: FlatStep[]): FileCoverage {
       if (idx < 0) return undefined
       const chapterIdx = flat[idx]?.chapterIdx
       return chapterIdx != null ? chapterIdx + 1 : undefined
+    },
+    pinnedFilesIn: (chapterIdx) => {
+      const bucket = pinnedByChapter.get(chapterIdx)
+      return bucket ? [...bucket] : []
     },
   }
 }

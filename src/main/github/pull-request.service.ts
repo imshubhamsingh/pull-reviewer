@@ -1,5 +1,6 @@
 import { graphql } from '@octokit/graphql'
 import type { AuthService } from '@/main/auth/auth.service'
+import type { PrRecentStore } from '@/main/github/pr-recent.store'
 import { Service } from '@/main/service'
 
 export type PrState = 'OPEN' | 'CLOSED' | 'MERGED'
@@ -55,8 +56,21 @@ const QUERY = `
 `
 
 export class PullRequestService extends Service {
-  constructor(private readonly auth: AuthService) {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly recents: PrRecentStore,
+  ) {
     super()
+  }
+
+  /** Local cache of recently opened PRs, newest first. */
+  listRecents(): PullRequestSummary[] {
+    return this.recents.list()
+  }
+
+  /** Upsert + bump `last_opened_at`. Called when the renderer opens a PR. */
+  touchRecent(pr: PullRequestSummary): void {
+    this.recents.touch(pr)
   }
 
   async listMine(): Promise<PullRequestSummary[]> {
@@ -65,6 +79,15 @@ export class PullRequestService extends Service {
 
   async listReviewRequested(): Promise<PullRequestSummary[]> {
     return this.search('is:pr is:open review-requested:@me archived:false')
+  }
+
+  /**
+   * PRs the current user has submitted at least one review on. Includes
+   * closed/merged so the user can still find old reviewed PRs for reference.
+   * Sorted by most-recently-updated so the latest activity surfaces first.
+   */
+  async listReviewedByMe(): Promise<PullRequestSummary[]> {
+    return this.search('is:pr reviewed-by:@me archived:false sort:updated-desc')
   }
 
   private async search(q: string): Promise<PullRequestSummary[]> {

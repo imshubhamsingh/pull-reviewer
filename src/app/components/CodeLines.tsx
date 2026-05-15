@@ -54,6 +54,19 @@ export function CodeLines(props: Props): JSX.Element {
     return { lines: tokens, fg: fg ?? '#d4d4d4', bg: bg ?? 'transparent' }
   }, [highlighter, content, lang])
 
+  // Every line covered by any pending draft — single-line drafts paint one row,
+  // range drafts paint [startLine, line] inclusive. Drives the persistent
+  // line-drafted highlight so a multi-line comment stays visible across the
+  // whole selection after the composer closes.
+  const draftedLines = useMemo(() => {
+    const s = new Set<number>()
+    for (const d of drafts) {
+      const { start, end } = draftRange(d)
+      for (let i = start; i <= end; i++) s.add(i)
+    }
+    return s
+  }, [drafts])
+
   useEffect(() => {
     if (scrollTo == null || !containerRef.current) return
     const target = containerRef.current.querySelector<HTMLElement>(`[data-line="${scrollTo}"]`)
@@ -80,6 +93,7 @@ export function CodeLines(props: Props): JSX.Element {
                   highlighted={!!range && lineNum >= range.start && lineNum <= range.end}
                   focused={focusSet.has(lineNum)}
                   selected={selection.isInRange(lineNum)}
+                  drafted={draftedLines.has(lineNum)}
                   onGutterDown={(shift) => selection.start(lineNum, shift)}
                   onGutterEnter={() => selection.extend(lineNum)}
                 />
@@ -114,7 +128,14 @@ export function CodeLines(props: Props): JSX.Element {
 }
 
 function isDraftAnchoredHere(d: ReviewDraft, line: number): boolean {
+  // The DraftRow itself attaches at the end-line of a range (GitHub convention);
+  // the line-drafted highlight separately paints the whole [start, end] window.
   return d.line === line
+}
+
+function draftRange(d: ReviewDraft): { start: number; end: number } {
+  if (d.startLine == null || d.startLine === d.line) return { start: d.line, end: d.line }
+  return { start: Math.min(d.startLine, d.line), end: Math.max(d.startLine, d.line) }
 }
 
 function composerRangeLabel(c: ComposerTarget): string {
@@ -138,11 +159,12 @@ interface CodeLineProps {
   highlighted: boolean
   focused: boolean
   selected: boolean
+  drafted: boolean
   onGutterDown: (shiftKey: boolean) => void
   onGutterEnter: () => void
 }
 
-function CodeLine({ tokens, lineNum, highlighted, focused, selected, onGutterDown, onGutterEnter }: CodeLineProps): JSX.Element {
+function CodeLine({ tokens, lineNum, highlighted, focused, selected, drafted, onGutterDown, onGutterEnter }: CodeLineProps): JSX.Element {
   return (
     <span
       data-line={lineNum}
@@ -151,6 +173,7 @@ function CodeLine({ tokens, lineNum, highlighted, focused, selected, onGutterDow
         highlighted && 'line-hl',
         focused && 'line-focus',
         selected && 'line-selected',
+        drafted && 'line-drafted',
       )}
     >
       <button

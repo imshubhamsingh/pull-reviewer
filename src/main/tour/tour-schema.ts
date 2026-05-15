@@ -19,6 +19,13 @@ export const DIAGRAM_KINDS = ['sequence', 'flowchart', 'er', 'class', 'fileGraph
 export const CRITIQUE_SEVERITIES = ['minor', 'major', 'blocker'] as const
 export const CODE_SIDES = ['before', 'after', 'diff'] as const
 
+// Tolerant array clamp — when the model emits more entries than we want, take
+// the first N rather than failing the whole tour. Better UX than throwing on
+// a single over-eager step. Caps are still upper bounds, not requirements.
+function clampArray(max: number) {
+  return (v: unknown): unknown => (Array.isArray(v) && v.length > max ? v.slice(0, max) : v)
+}
+
 const CodePointerSchema = z.object({
   file: z.string().min(1),
   side: z.enum(CODE_SIDES).optional(),
@@ -26,8 +33,8 @@ const CodePointerSchema = z.object({
   lineEnd: z.number().int().nonnegative().optional(),
   /** Single line the renderer should center / scroll to — usually the call or decision the step is about. Defaults to lineStart. */
   focusLine: z.number().int().nonnegative().optional(),
-  /** Up to 5 lines the renderer should emphasise. Use when the narration calls out multiple specific spots; `focusLine` is the single-line shorthand. */
-  focusLines: z.array(z.number().int().nonnegative()).max(5).optional(),
+  /** Up to 10 lines the renderer should emphasise. Clamped to first 10 if the model emits more. */
+  focusLines: z.preprocess(clampArray(10), z.array(z.number().int().nonnegative()).max(10).optional()),
   /** Extra lines of buffer above/below the [lineStart, lineEnd] window. Renderer hint; defaults to 2. */
   contextLines: z.number().int().nonnegative().max(20).optional(),
 })
@@ -47,7 +54,7 @@ const TourStepSchema = z
     title: z.string().min(1).max(120),
     body: z.preprocess((v) => (typeof v === 'string' ? v : ''), z.string()),
     code: CodePointerSchema.optional(),
-    references: z.array(CodePointerSchema).max(8).optional(),
+    references: z.preprocess(clampArray(16), z.array(CodePointerSchema).max(16).optional()),
     diagram: DiagramSchema.optional(),
   })
   .refine((s) => s.panel !== 'code' || !!s.code, { message: '`code` panel requires `code`' })
