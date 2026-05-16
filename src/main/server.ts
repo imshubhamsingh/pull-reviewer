@@ -16,11 +16,14 @@ export function startApiServer(services: Services): Promise<RunningServer> {
   // The renderer origin differs from the API host in dev (vite serves on
   // localhost:5173, Hono binds to 127.0.0.1). Permissive CORS is safe here —
   // the server only listens on 127.0.0.1, so no external can reach it.
-  app.use('*', cors({
-    origin: '*',
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Accept'],
-  }))
+  app.use(
+    '*',
+    cors({
+      origin: '*',
+      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Accept'],
+    }),
+  )
 
   app.get('/health', (c) => c.json({ ok: true }))
   app.route('/api/pull-requests', services.routers.pullRequests.routes())
@@ -36,12 +39,15 @@ export function startApiServer(services: Services): Promise<RunningServer> {
     // Bind to 127.0.0.1 explicitly. `localhost` can resolve to ::1 (IPv6) on
     // macOS/Node 20+, which Chromium's fetch may not try, producing
     // "Failed to fetch" in the renderer.
-    const server: ServerType = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' }, (info) => {
-      log.info('API server listening', { port: info.port })
-      resolve({
-        port: info.port,
-        stop: () => new Promise<void>((res) => server.close(() => res())),
-      })
-    })
+    const server: ServerType = serve(
+      { fetch: app.fetch, port: 0, hostname: '127.0.0.1' },
+      (info) => {
+        log.info('API server listening', { port: info.port })
+        resolve({
+          port: info.port,
+          stop: () => new Promise<void>((res) => server.close(() => res())),
+        })
+      },
+    )
   })
 }

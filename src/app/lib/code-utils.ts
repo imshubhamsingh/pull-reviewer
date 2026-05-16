@@ -74,8 +74,20 @@ export function inferLang(file: string): string {
 }
 
 const EXT_TO_LANG: Record<string, string> = {
-  ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
-  json: 'json', css: 'css', html: 'html', md: 'markdown',
-  py: 'python', rs: 'rust', go: 'go', sql: 'sql',
-  yml: 'yaml', yaml: 'yaml', sh: 'bash', bash: 'bash',
+  ts: 'typescript',
+  tsx: 'tsx',
+  js: 'javascript',
+  jsx: 'jsx',
+  json: 'json',
+  css: 'css',
+  html: 'html',
+  md: 'markdown',
+  py: 'python',
+  rs: 'rust',
+  go: 'go',
+  sql: 'sql',
+  yml: 'yaml',
+  yaml: 'yaml',
+  sh: 'bash',
+  bash: 'bash',
 }

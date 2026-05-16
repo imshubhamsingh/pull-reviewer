@@ -33,8 +33,11 @@ export class CloneRegistry extends Service {
     this.logger.info('Cloning repo (bare, blobless)', { repo, dir })
     await fs.mkdir(path.dirname(dir), { recursive: true })
     await this.git.run([
-      'clone', '--bare', '--filter=blob:none',
-      `https://github.com/${repo}.git`, dir,
+      'clone',
+      '--bare',
+      '--filter=blob:none',
+      `https://github.com/${repo}.git`,
+      dir,
     ])
     const now = new Date().toISOString()
     this.store.upsert({ repo, path: dir, clonedAt: now, lastFetchedAt: now, lastAccessedAt: now })
@@ -53,5 +56,8 @@ export class CloneRegistry extends Service {
 }
 
 async function exists(p: string): Promise<boolean> {
-  return fs.access(p).then(() => true).catch(() => false)
+  return fs
+    .access(p)
+    .then(() => true)
+    .catch(() => false)
 }

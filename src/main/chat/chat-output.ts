@@ -48,7 +48,10 @@ function unwrapEnvelope(text: string): string {
 }
 
 function stripFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  return text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .trim()
 }
 
 /**
@@ -63,9 +66,18 @@ function extractJsonObject(text: string): string {
   let escape = false
   for (let i = start; i < text.length; i++) {
     const ch = text[i]
-    if (escape) { escape = false; continue }
-    if (ch === '\\') { escape = true; continue }
-    if (ch === '"') { inString = !inString; continue }
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === '\\') {
+      escape = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
     if (inString) continue
     if (ch === '{') depth++
     else if (ch === '}') {

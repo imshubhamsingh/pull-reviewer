@@ -1,4 +1,7 @@
-import type { ChapterCompletionRecord, ChapterCompletionStore } from '@/main/tour/chapter-completion.store'
+import type {
+  ChapterCompletionRecord,
+  ChapterCompletionStore,
+} from '@/main/tour/chapter-completion.store'
 import { Service } from '@/main/service'
 
 /**
@@ -15,7 +18,12 @@ export class ChapterCompletionService extends Service {
     return this.store.list(repo, prNumber, headRefOid)
   }
 
-  mark(repo: string, prNumber: number, headRefOid: string, chapterId: string): ChapterCompletionRecord {
+  mark(
+    repo: string,
+    prNumber: number,
+    headRefOid: string,
+    chapterId: string,
+  ): ChapterCompletionRecord {
     return this.store.mark({ repo, prNumber, headRefOid, chapterId })
   }
 

@@ -69,7 +69,12 @@ export class FileReviewStore extends Service {
    * complete cascade to atomically tick every pinned file. Idempotent per
    * file (UNIQUE absorbs duplicates).
    */
-  markMany(repo: string, prNumber: number, headRefOid: string, filePaths: string[]): FileReviewRecord[] {
+  markMany(
+    repo: string,
+    prNumber: number,
+    headRefOid: string,
+    filePaths: string[],
+  ): FileReviewRecord[] {
     if (filePaths.length === 0) return []
     const now = new Date().toISOString()
     this.db.transaction(() => {
@@ -102,7 +107,12 @@ export class FileReviewStore extends Service {
     )
   }
 
-  private findOne(repo: string, prNumber: number, headRefOid: string, filePath: string): FileReviewRecord {
+  private findOne(
+    repo: string,
+    prNumber: number,
+    headRefOid: string,
+    filePath: string,
+  ): FileReviewRecord {
     const row = this.db.selectOne<Row>(
       /* sql */ `
         SELECT ${COLUMNS}

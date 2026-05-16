@@ -15,7 +15,12 @@ export class FileReviewService extends Service {
     return this.store.list(repo, prNumber, headRefOid)
   }
 
-  markMany(repo: string, prNumber: number, headRefOid: string, filePaths: string[]): FileReviewRecord[] {
+  markMany(
+    repo: string,
+    prNumber: number,
+    headRefOid: string,
+    filePaths: string[],
+  ): FileReviewRecord[] {
     return this.store.markMany(repo, prNumber, headRefOid, filePaths)
   }
 

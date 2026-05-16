@@ -39,12 +39,32 @@
 ## Diagrams
 - For 'diagram' steps, write valid Mermaid syntax. Keep diagrams under ~30 nodes — bigger than that is hard to read.
 - Prefer 'sequence' for request/call flows, 'flowchart' for control flow / decision trees, 'er' for schema relationships, 'fileGraph' for import/file relationships.
+- For visual layout of new screens / modals / dialogs / forms / wizards, use the **'mockup'** diagram kind instead — see the "UI Mockups" section below.
+
+## UI Mockups (diagram.kind = 'mockup')
+The `mockup` diagram kind is a structured JSON wireframe (not Mermaid). It renders as a Figma-style flow: every frame laid out on one pannable canvas with labeled arrows between them. Use it when the PR adds or substantially changes screens, modals, forms, or multi-step flows — the user-visible *shape*, not the call graph.
+
+- **When to emit:** at least one mockup step inside the User journey chapter when the PR introduces new UI or rearranges existing screens. Pure backend / refactor PRs skip mockups entirely.
+- **`mockup.frames[]` — one frame per visual state the user actually sees.** Re-read your `body` narration before deciding the frame list: any screen, redirect target, loading state, modal, or post-action variant that's mentioned should appear as its own frame. If the user's eyes see a different layout, it's a new frame. Don't collapse intermediate states into a "before / after" pair — the in-between frames are usually the most informative for a reviewer. Cap is 8.
+- **Coordinates inside a frame are unitless.** Frame `width` 320-960 px and `height` 240-720 px are typical. Pack elements in top-down reading order; nest with `group` for cards / sections / panels.
+- **Available element `type`s** (24 total): `box`, `group`, `divider`, `spacer`, `text`, `link`, `code`, `button`, `input`, `textarea`, `select`, `checkbox`, `radio`, `toggle`, `image`, `avatar`, `icon`, `badge`, `table`, `list`, `tabs`, `nav`, `modal`, `tooltip`. See `schema-reference.md` for required/optional fields per kind.
+- **Lo-fi by construction.** No shadows, gradients, custom colors. The only tone hints are `variant` on `button`, `tone` on `text` and `badge`, and `active` flags on `tabs`/`nav`. Don't try to mirror Tailwind colors — wireframe is the goal.
+- **`source: "<repo-relative path>:<lineStart>-<lineEnd>"` on any element** pinpoints the JSX that produces it. Add it whenever you can — reviewers click through.
+- **Frame layout on the flow canvas (Figma-style):** the renderer paints every frame at once with arrows between them, so reviewers see the whole user journey in one view. Two options:
+  - **Recommended for linear flows:** omit `canvasX/canvasY` on every frame. The renderer auto-lays out frames left-to-right by walking the transition graph; branches fan vertically.
+  - **Explicit positioning** when the journey forks dramatically or you want a specific spatial story: set `canvasX/canvasY` (top-left of each frame on the canvas). Leave 80-120 px of gutter between adjacent frames.
+- **`transitions[]` is REQUIRED whenever you emit more than one frame.** Connect every consecutive pair (and any branches/loops). A two-frame mockup with no transition reads as "two unrelated screens" — always wire them up.
+- **`trigger` must be SHORT (≤24 chars).** It's a label on a tiny arrow, not a sentence. Good: `"click Login"`, `"SSO succeeds"`, `"form valid"`, `"401 — token expired"`, `"esc / outside click"`. Bad: `"success → /api/auth/me redirects to /workflow"`. Save the prose for the step's `body`; keep the trigger to a verb + noun.
+- **`fromSide`/`toSide` on a transition** are optional anchor hints (`top`/`right`/`bottom`/`left`). Use when the auto-anchor (relative position) crosses through another frame; otherwise leave unset.
+- **Read the JSX before designing the mockup.** Tailwind classes carry spatial info (`flex-col`, `gap-2`, `w-64`, `text-sm`, etc.). Don't hallucinate elements that aren't in the diff; if a screen exists outside the diff but the change references it (e.g., an SSO provider's login page), model its key landmarks (logo, fields, submit button) without speculating on details.
 
 ## User journey — required for UI changes
 - **If the PR touches user-facing UI** (new screens, new flows, modified interactions, new buttons/forms/dialogs, navigation changes), include a dedicated **"User journey"** chapter. Place it early — after the overview docs step but before the implementation chapters — so the reviewer understands the user-visible behaviour before diving into code.
-- The chapter must contain at least one **diagram step** that visualises the journey:
+- The chapter must contain at least one **diagram step** that visualises the journey. Pick the kind that fits the change:
+  - Use `'mockup'` when the PR adds or rearranges *visual layout* — new screens, modals, forms, redesigned panels. The mockup is a Figma-style flow of wireframe frames connected by labeled arrows; reviewers see what the user sees. See the "UI Mockups" section above for the grammar.
   - Use `'sequence'` for diagrams that show the user interacting with the UI and the UI making backend calls (actor: User → UI → API → DB). Best when the change is about request/response flow, auth handshakes, or multi-system interactions.
-  - Use `'flowchart'` for diagrams that show the user's decision path (click X → see Y → click Z → land at W). Best for branching UX, conditional states (empty / loading / error / success), wizards, or form validation flows.
+  - Use `'flowchart'` for diagrams that show the user's decision path *without* visual layout detail (click X → see Y → click Z → land at W). Best for high-level branching UX where the screens themselves aren't the story.
+  - Use multiple diagram steps when the journey has both — e.g., a `'mockup'` showing the new modal, plus a `'sequence'` showing the API call it fires.
 - The diagram's `body` must read like a guided tour: "The user clicks **Submit review**, which fires `POST /api/reviews/...`. On success they see the new badge; on failure they see the inline error and the draft list remains." Don't restate the diagram — narrate the *user-visible* consequence of each transition.
 - Follow the diagram with 1–3 `'code'` steps that pin the components / handlers driving the key transitions (e.g., the click handler, the loading state, the success/error rendering). Each step's body should answer "what does the user actually see at this moment, and what triggered it?".
 - If the PR has multiple distinct flows (e.g., onboarding + settings change), give each its own diagram step inside the same User journey chapter.

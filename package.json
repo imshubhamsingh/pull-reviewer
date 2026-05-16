@@ -9,7 +9,19 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "lint": "eslint src --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
@@ -51,7 +63,11 @@
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^39.0.0",
     "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
     "globals": "^15.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
+    "prettier": "^3.8.3",
     "tailwindcss": "^4.0.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.9.0",

@@ -17,12 +17,12 @@ export interface BandSpec {
 
 export const PICKUP_BANDS: BandSpec = { elite: 2, good: 6, fair: 16 }
 export const REVIEW_BANDS: BandSpec = { elite: 5, good: 18, fair: 26 }
-export const MERGE_BANDS:  BandSpec = { elite: 2, good: 5, fair: 19 }
+export const MERGE_BANDS: BandSpec = { elite: 2, good: 5, fair: 19 }
 
 export function classify(hours: number, bands: BandSpec): HealthBand {
   if (hours < bands.elite) return 'elite'
-  if (hours < bands.good)  return 'good'
-  if (hours < bands.fair)  return 'fair'
+  if (hours < bands.good) return 'good'
+  if (hours < bands.fair) return 'fair'
   return 'focus'
 }
 

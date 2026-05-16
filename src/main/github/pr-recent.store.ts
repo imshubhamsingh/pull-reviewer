@@ -1,5 +1,9 @@
 import type { Db } from '@/main/db/db'
-import type { PrState, PullRequestSummary, ReviewDecision } from '@/main/github/pull-request.service'
+import type {
+  PrState,
+  PullRequestSummary,
+  ReviewDecision,
+} from '@/main/github/pull-request.service'
 import { Service } from '@/main/service'
 
 interface Row {

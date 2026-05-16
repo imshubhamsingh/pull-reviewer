@@ -28,7 +28,9 @@ export class PullRequestRouter extends Service {
     app.get('/recents', (c) => c.json(this.pullRequests.listRecents()))
 
     app.post('/recents/touch', async (c) => {
-      const body = await c.req.json<PullRequestSummary>().catch((): PullRequestSummary | null => null)
+      const body = await c.req
+        .json<PullRequestSummary>()
+        .catch((): PullRequestSummary | null => null)
       if (!body || typeof body.number !== 'number' || typeof body.repo !== 'string') {
         return c.json({ error: 'invalid pr summary' }, 400)
       }

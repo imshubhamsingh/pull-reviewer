@@ -27,7 +27,12 @@ export class BlobReader extends Service {
     super()
   }
 
-  async read(repo: string, sha: string, filePath: string, maxBytes = MAX_INLINE_BYTES): Promise<BlobResult> {
+  async read(
+    repo: string,
+    sha: string,
+    filePath: string,
+    maxBytes = MAX_INLINE_BYTES,
+  ): Promise<BlobResult> {
     await this.registry.ensureSha(repo, sha)
     const dir = this.registry.pathFor(repo)
 

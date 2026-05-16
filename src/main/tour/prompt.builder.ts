@@ -15,11 +15,7 @@ import { Service } from '@/main/service'
  */
 export class PromptBuilder extends Service {
   build(ctx: PrContext, retryHint?: string): string {
-    const sections = [
-      template(prContextTemplate, this.contextVars(ctx)),
-      schemaReference,
-      rules,
-    ]
+    const sections = [template(prContextTemplate, this.contextVars(ctx)), schemaReference, rules]
     if (retryHint) sections.push(template(retryHintTemplate, { reason: retryHint }))
     return sections.join('\n\n').trim()
   }

@@ -25,8 +25,7 @@ export interface CreateChatBody {
 }
 
 export const chats = {
-  list: (repo: string, prNumber: number) =>
-    http.get<PrChat[]>(`/api/chats/${repo}/${prNumber}`),
+  list: (repo: string, prNumber: number) => http.get<PrChat[]>(`/api/chats/${repo}/${prNumber}`),
 
   create: (repo: string, prNumber: number, body: CreateChatBody = {}) =>
     http.post<PrChat>(`/api/chats/${repo}/${prNumber}`, body),
@@ -54,14 +53,11 @@ export const chats = {
     opts: { signal?: AbortSignal } = {},
   ) => streamSend(repo, prNumber, chatId, body, opts),
 
-  rename: (chatId: number, title: string) =>
-    http.patch<PrChat>(`/api/chats/${chatId}`, { title }),
+  rename: (chatId: number, title: string) => http.patch<PrChat>(`/api/chats/${chatId}`, { title }),
 
-  remove: (chatId: number) =>
-    http.del<{ deleted: boolean }>(`/api/chats/${chatId}`),
+  remove: (chatId: number) => http.del<{ deleted: boolean }>(`/api/chats/${chatId}`),
 
-  removeMessage: (id: number) =>
-    http.del<{ deleted: boolean }>(`/api/chats/messages/${id}`),
+  removeMessage: (id: number) => http.del<{ deleted: boolean }>(`/api/chats/messages/${id}`),
 }
 
 async function* streamSend(
@@ -88,6 +84,9 @@ async function* streamSend(
       .with('phase', () => ({ event: 'phase', data }) as ChatStreamEvent)
       .with('done', () => ({ event: 'done' as const, data: data as PrChatMessage }))
       .with('error', () => ({ event: 'error' as const, data: data as { message: string } }))
-      .otherwise(() => ({ event: 'partial_text' as const, data: { type: 'partial_text', text: msg.data } }))
+      .otherwise(() => ({
+        event: 'partial_text' as const,
+        data: { type: 'partial_text', text: msg.data },
+      }))
   }
 }

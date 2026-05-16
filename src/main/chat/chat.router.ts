@@ -4,9 +4,15 @@ import type { ChatService } from '@/main/chat/chat.service'
 import { Service } from '@/main/service'
 import type { CliEvent } from '@/main/tour/cli-event'
 
-interface SendBody { message: string }
-interface RenameBody { title: string }
-interface CreateBody { title?: string }
+interface SendBody {
+  message: string
+}
+interface RenameBody {
+  title: string
+}
+interface CreateBody {
+  title?: string
+}
 
 export class ChatRouter extends Service {
   constructor(private readonly chats: ChatService) {
@@ -18,17 +24,29 @@ export class ChatRouter extends Service {
 
     // GET /:owner/:name/:pr → list chats for this PR, newest-updated first.
     app.get('/:repoOwner/:repoName/:prNumber', (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       return c.json(this.chats.listChats(parsed.repo, parsed.prNumber))
     })
 
     // POST /:owner/:name/:pr → create a new chat.
     app.post('/:repoOwner/:repoName/:prNumber', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       const body = await c.req.json<CreateBody>().catch((): CreateBody => ({}))
-      const chat = this.chats.createChat(parsed.repo, parsed.prNumber, body.title?.trim() || undefined)
+      const chat = this.chats.createChat(
+        parsed.repo,
+        parsed.prNumber,
+        body.title?.trim() || undefined,
+      )
       return c.json(chat)
     })
 
@@ -120,7 +138,11 @@ interface ParsedParams {
   prNumber: number
 }
 
-function parseParams(repoOwner: string, repoName: string, prNumberRaw: string): ParsedParams | null {
+function parseParams(
+  repoOwner: string,
+  repoName: string,
+  prNumberRaw: string,
+): ParsedParams | null {
   const prNumber = Number(prNumberRaw)
   if (!Number.isInteger(prNumber) || prNumber <= 0) return null
   return { repo: `${repoOwner}/${repoName}`, prNumber }

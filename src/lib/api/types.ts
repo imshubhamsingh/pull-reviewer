@@ -37,10 +37,192 @@ export interface CodePointer {
   contextLines?: number
 }
 
-export interface Diagram {
-  kind: 'sequence' | 'flowchart' | 'er' | 'class' | 'fileGraph'
-  mermaid: string
+/**
+ * Lo-fi UI mockup wire types — mirrored from `src/main/tour/mockup-schema.ts`.
+ * Multi-frame mockups render Figma-style: every frame laid out on one pannable
+ * canvas with labeled arrows between them per `MockupTransition.trigger`.
+ */
+export type MockupElement =
+  | { type: 'box'; x: number; y: number; w: number; h: number; source?: string; label?: string }
+  | {
+      type: 'group'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      label?: string
+      children: MockupElement[]
+    }
+  | { type: 'divider'; x: number; y: number; w: number; source?: string }
+  | { type: 'spacer'; x: number; y: number; w: number; h: number; source?: string }
+  | {
+      type: 'text'
+      x: number
+      y: number
+      source?: string
+      text: string
+      size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+      weight?: 'normal' | 'medium' | 'bold'
+      tone?: 'primary' | 'secondary' | 'muted' | 'danger'
+    }
+  | { type: 'link'; x: number; y: number; source?: string; text: string; href?: string }
+  | { type: 'code'; x: number; y: number; source?: string; text: string }
+  | {
+      type: 'button'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      label: string
+      variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon'
+      icon?: string
+    }
+  | {
+      type: 'input'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      kind?: 'text' | 'password' | 'email' | 'number' | 'search'
+      placeholder?: string
+      value?: string
+    }
+  | {
+      type: 'textarea'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      placeholder?: string
+      value?: string
+      rows?: number
+    }
+  | {
+      type: 'select'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      placeholder?: string
+      value?: string
+      options?: string[]
+    }
+  | { type: 'checkbox'; x: number; y: number; source?: string; label?: string; checked: boolean }
+  | {
+      type: 'radio'
+      x: number
+      y: number
+      source?: string
+      label?: string
+      checked: boolean
+      groupId?: string
+    }
+  | { type: 'toggle'; x: number; y: number; source?: string; label?: string; on: boolean }
+  | { type: 'image'; x: number; y: number; w: number; h: number; source?: string; alt?: string }
+  | { type: 'avatar'; x: number; y: number; source?: string; size?: number; label?: string }
+  | { type: 'icon'; x: number; y: number; source?: string; name: string; size?: number }
+  | {
+      type: 'badge'
+      x: number
+      y: number
+      source?: string
+      label: string
+      tone?: 'primary' | 'secondary' | 'muted' | 'danger' | 'success' | 'warn'
+    }
+  | {
+      type: 'table'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      columns: string[]
+      rows: string[][]
+    }
+  | {
+      type: 'list'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      items: string[]
+      ordered?: boolean
+    }
+  | {
+      type: 'tabs'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      tabs: string[]
+      activeIdx?: number
+    }
+  | {
+      type: 'nav'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      items: { label: string; active?: boolean }[]
+      orientation?: 'horizontal' | 'vertical'
+    }
+  | {
+      type: 'modal'
+      x: number
+      y: number
+      w: number
+      h: number
+      source?: string
+      title?: string
+      children: MockupElement[]
+    }
+  | {
+      type: 'tooltip'
+      x: number
+      y: number
+      source?: string
+      text: string
+      anchor?: 'top' | 'bottom' | 'left' | 'right'
+    }
+
+export interface MockupFrame {
+  id: string
+  title: string
+  width: number
+  height: number
+  canvasX?: number
+  canvasY?: number
+  elements: MockupElement[]
 }
+
+export interface MockupTransition {
+  fromFrame: string
+  toFrame: string
+  trigger: string
+  fromSide?: 'top' | 'right' | 'bottom' | 'left'
+  toSide?: 'top' | 'right' | 'bottom' | 'left'
+}
+
+export interface MockupScene {
+  frames: MockupFrame[]
+  transitions?: MockupTransition[]
+}
+
+export type Diagram =
+  | { kind: 'sequence'; mermaid: string }
+  | { kind: 'flowchart'; mermaid: string }
+  | { kind: 'er'; mermaid: string }
+  | { kind: 'class'; mermaid: string }
+  | { kind: 'fileGraph'; mermaid: string }
+  | { kind: 'mockup'; mockup: MockupScene }
 
 export interface TourStep {
   id: string

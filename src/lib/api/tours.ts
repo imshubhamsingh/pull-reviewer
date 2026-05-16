@@ -7,15 +7,23 @@ import type { TokenUsage, TourResult } from '@/lib/api/types'
 export type TourStreamEvent =
   | { event: 'tool_call'; data: { type: 'tool_call'; name: string; input: unknown } }
   | { event: 'partial_text'; data: { type: 'partial_text'; text: string } }
-  | { event: 'final'; data: { type: 'final'; raw: string; costUsd?: number; durationMs?: number; usage?: TokenUsage } }
+  | {
+      event: 'final'
+      data: {
+        type: 'final'
+        raw: string
+        costUsd?: number
+        durationMs?: number
+        usage?: TokenUsage
+      }
+    }
   | { event: 'phase'; data: { type: 'phase'; name: string; detail?: string } }
   | { event: 'done'; data: TourResult }
   | { event: 'error'; data: { message: string } }
 
 export const tours = {
   /** Returns the cached tour, or rejects with ApiError(404) if none exists. Never runs the model. */
-  get: (repo: string, prNumber: number) =>
-    http.get<TourResult>(`/api/tours/${repo}/${prNumber}`),
+  get: (repo: string, prNumber: number) => http.get<TourResult>(`/api/tours/${repo}/${prNumber}`),
   /**
    * If a cached tour exists, returns it (possibly stale — check `currentHeadRefOid !== headRefOid`).
    * Otherwise runs the model. With `force: true`, bypasses the cache and always runs the model.
@@ -56,5 +64,8 @@ function decodeStreamEvent(msg: SseMessage): TourStreamEvent {
     .with('phase', () => ({ event: 'phase', data }) as TourStreamEvent)
     .with('done', () => ({ event: 'done' as const, data: data as TourResult }))
     .with('error', () => ({ event: 'error' as const, data: data as { message: string } }))
-    .otherwise(() => ({ event: 'partial_text' as const, data: { type: 'partial_text', text: msg.data } }))
+    .otherwise(() => ({
+      event: 'partial_text' as const,
+      data: { type: 'partial_text', text: msg.data },
+    }))
 }

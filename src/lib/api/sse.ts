@@ -33,7 +33,12 @@ export async function* openSSE(
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
-      yield* drainFrames(() => buffer, (next) => { buffer = next })
+      yield* drainFrames(
+        () => buffer,
+        (next) => {
+          buffer = next
+        },
+      )
     }
   } finally {
     reader.releaseLock()

@@ -29,13 +29,21 @@ export class ReviewRouter extends Service {
     const app = new Hono()
 
     app.get('/:repoOwner/:repoName/:prNumber/drafts', (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       return c.json(this.reviews.list(parsed.repo, parsed.prNumber))
     })
 
     app.post('/:repoOwner/:repoName/:prNumber/drafts', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       const body = await c.req.json<DraftBody>().catch((): DraftBody | null => null)
       if (!body || !body.file || !body.body || !Number.isInteger(body.line)) {
@@ -70,7 +78,11 @@ export class ReviewRouter extends Service {
     })
 
     app.post('/:repoOwner/:repoName/:prNumber/submit', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       const body = await c.req.json<SubmitBody>().catch((): SubmitBody | null => null)
       if (!body || !body.headSha) return c.json({ error: 'headSha is required' }, 400)
@@ -84,7 +96,11 @@ export class ReviewRouter extends Service {
         })
         return c.json(result)
       } catch (err) {
-        this.logger.error('Review submit failed', { repo: parsed.repo, prNumber: parsed.prNumber, err: (err as Error).message })
+        this.logger.error('Review submit failed', {
+          repo: parsed.repo,
+          prNumber: parsed.prNumber,
+          err: (err as Error).message,
+        })
         return c.json({ error: (err as Error).message }, 500)
       }
     })
@@ -98,7 +114,11 @@ interface ParsedParams {
   prNumber: number
 }
 
-function parseParams(repoOwner: string, repoName: string, prNumberRaw: string): ParsedParams | null {
+function parseParams(
+  repoOwner: string,
+  repoName: string,
+  prNumberRaw: string,
+): ParsedParams | null {
   const prNumber = Number(prNumberRaw)
   if (!Number.isInteger(prNumber) || prNumber <= 0) return null
   return { repo: `${repoOwner}/${repoName}`, prNumber }

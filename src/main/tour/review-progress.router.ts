@@ -29,20 +29,35 @@ export class ReviewProgressRouter extends Service {
     // -------- Chapter completions ---------
 
     app.get('/:repoOwner/:repoName/:prNumber/:headSha/chapters', (c) => {
-      const ctx = parseScope(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'), c.req.param('headSha'))
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       return c.json(this.chapters.list(ctx.repo, ctx.prNumber, ctx.headSha))
     })
 
     app.post('/:repoOwner/:repoName/:prNumber/:headSha/chapters/:chapterId', (c) => {
-      const ctx = parseScope(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'), c.req.param('headSha'))
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       const chapterId = decodeURIComponent(c.req.param('chapterId'))
       return c.json(this.chapters.mark(ctx.repo, ctx.prNumber, ctx.headSha, chapterId))
     })
 
     app.delete('/:repoOwner/:repoName/:prNumber/:headSha/chapters/:chapterId', (c) => {
-      const ctx = parseScope(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'), c.req.param('headSha'))
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       const chapterId = decodeURIComponent(c.req.param('chapterId'))
       const deleted = this.chapters.unmark(ctx.repo, ctx.prNumber, ctx.headSha, chapterId)
@@ -52,7 +67,12 @@ export class ReviewProgressRouter extends Service {
     // -------- File reviews ---------
 
     app.get('/:repoOwner/:repoName/:prNumber/:headSha/files', (c) => {
-      const ctx = parseScope(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'), c.req.param('headSha'))
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       return c.json(this.files.list(ctx.repo, ctx.prNumber, ctx.headSha))
     })
@@ -62,17 +82,31 @@ export class ReviewProgressRouter extends Service {
     // every pinned file in the chapter). Same code path keeps the renderer
     // simple.
     app.post('/:repoOwner/:repoName/:prNumber/:headSha/files', async (c) => {
-      const ctx = parseScope(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'), c.req.param('headSha'))
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       const body = await c.req.json<MarkFilesBody>().catch((): MarkFilesBody | null => null)
-      if (!body || !Array.isArray(body.filePaths) || body.filePaths.some((p) => typeof p !== 'string')) {
+      if (
+        !body ||
+        !Array.isArray(body.filePaths) ||
+        body.filePaths.some((p) => typeof p !== 'string')
+      ) {
         return c.json({ error: 'filePaths: string[] required' }, 400)
       }
       return c.json(this.files.markMany(ctx.repo, ctx.prNumber, ctx.headSha, body.filePaths))
     })
 
     app.delete('/:repoOwner/:repoName/:prNumber/:headSha/files/:filePath', (c) => {
-      const ctx = parseScope(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'), c.req.param('headSha'))
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       const filePath = decodeURIComponent(c.req.param('filePath'))
       const deleted = this.files.unmark(ctx.repo, ctx.prNumber, ctx.headSha, filePath)
@@ -89,7 +123,12 @@ interface Scope {
   headSha: string
 }
 
-function parseScope(repoOwner: string, repoName: string, prNumberRaw: string, headShaRaw: string): Scope | null {
+function parseScope(
+  repoOwner: string,
+  repoName: string,
+  prNumberRaw: string,
+  headShaRaw: string,
+): Scope | null {
   const prNumber = Number(prNumberRaw)
   const headSha = decodeURIComponent(headShaRaw)
   if (!Number.isInteger(prNumber) || prNumber <= 0 || !headSha) return null

@@ -1,6 +1,11 @@
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import globals from 'globals'
+import prettier from 'eslint-config-prettier'
+
+// `eslint-config-prettier` is listed LAST so it turns off any stylistic ESLint
+// rule that conflicts with Prettier — Prettier owns formatting; ESLint owns
+// correctness. Together they enforce the same style without fighting.
 
 export default tseslint.config(
   {
@@ -22,4 +27,5 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports', fixStyle: 'inline-type-imports' }],
     },
   },
+  prettier,
 )

@@ -89,7 +89,15 @@ export function buildServices(): Services {
   const worktrees = new WorktreeManager(gitRunner, cloneRegistry)
   const clones = new GitCloneManager(cloneRegistry, blobReader, worktrees)
 
-  const generatedSource = new GeneratedTourSource(collector, promptBuilder, cli, parser, tourStore, models, clones)
+  const generatedSource = new GeneratedTourSource(
+    collector,
+    promptBuilder,
+    cli,
+    parser,
+    tourStore,
+    models,
+    clones,
+  )
   const tours = new TourService(cachedSource, generatedSource, tourStore)
 
   const fileSnapshotStore = new FileSnapshotStore(db.query)
@@ -105,7 +113,16 @@ export function buildServices(): Services {
   const settings = new SettingsStore(db.query)
   const chatStore = new PrChatStore(db.query)
   const chatPromptBuilder = new ChatPromptBuilder()
-  const chats = new ChatService(chatStore, settings, collector, tourStore, clones, cli, models, chatPromptBuilder)
+  const chats = new ChatService(
+    chatStore,
+    settings,
+    collector,
+    tourStore,
+    clones,
+    cli,
+    models,
+    chatPromptBuilder,
+  )
 
   const chapterCompletionStore = new ChapterCompletionStore(db.query)
   const chapterCompletions = new ChapterCompletionService(chapterCompletionStore)

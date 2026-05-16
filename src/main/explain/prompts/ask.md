@@ -6,6 +6,7 @@ Be concise — 1-3 short paragraphs. Do not restate what the code obviously says
 
 File: {{file}}
 Lines {{startLine}}-{{endLine}} (marked with ►; surrounding lines for context):
+
 ```
 {{window}}
 ```

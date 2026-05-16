@@ -21,8 +21,7 @@ export const qa = {
     input: AskAiInput,
     opts: { signal?: AbortSignal } = {},
   ) => streamAsk(repo, prNumber, input, opts),
-  remove: (id: number) =>
-    http.del<{ deleted: boolean }>(`/api/explain/threads/${id}`),
+  remove: (id: number) => http.del<{ deleted: boolean }>(`/api/explain/threads/${id}`),
 }
 
 async function* streamAsk(
@@ -47,6 +46,9 @@ async function* streamAsk(
       .with('final', () => ({ event: 'final', data }) as AskStreamEvent)
       .with('done', () => ({ event: 'done' as const, data: data as QaThread }))
       .with('error', () => ({ event: 'error' as const, data: data as { message: string } }))
-      .otherwise(() => ({ event: 'partial_text' as const, data: { type: 'partial_text', text: msg.data } }))
+      .otherwise(() => ({
+        event: 'partial_text' as const,
+        data: { type: 'partial_text', text: msg.data },
+      }))
   }
 }

@@ -2,11 +2,11 @@ import type { Db } from '@/main/db/db'
 import { Service } from '@/main/service'
 
 export interface CloneRecord {
-  repo: string                  // "{owner}/{name}"
-  path: string                  // absolute filesystem path to the bare clone
-  clonedAt: string              // ISO 8601
-  lastFetchedAt: string         // last `git fetch` time
-  lastAccessedAt: string        // touched on each read
+  repo: string // "{owner}/{name}"
+  path: string // absolute filesystem path to the bare clone
+  clonedAt: string // ISO 8601
+  lastFetchedAt: string // last `git fetch` time
+  lastAccessedAt: string // touched on each read
 }
 
 interface Row {
@@ -25,7 +25,9 @@ export class CloneStore extends Service {
   }
 
   get(repo: string): CloneRecord | undefined {
-    const row = this.db.selectOne<Row>(/* sql */ `SELECT ${COLUMNS} FROM clones WHERE repo = ?`, [repo])
+    const row = this.db.selectOne<Row>(/* sql */ `SELECT ${COLUMNS} FROM clones WHERE repo = ?`, [
+      repo,
+    ])
     return row ? toRecord(row) : undefined
   }
 

@@ -1,10 +1,6 @@
 import { parseChatEnvelope } from '@/main/chat/chat-output'
 import type { ChatPromptBuilder } from '@/main/chat/chat-prompt.builder'
-import type {
-  PrChatMessageRecord,
-  PrChatRecord,
-  PrChatStore,
-} from '@/main/chat/chat.store'
+import type { PrChatMessageRecord, PrChatRecord, PrChatStore } from '@/main/chat/chat.store'
 import type { GitCloneManager } from '@/main/git/clone.manager'
 import { Service } from '@/main/service'
 import type { SettingsStore } from '@/main/settings/settings.store'
@@ -210,7 +206,9 @@ class PartialTextBuffer {
   record(event: CliEvent): void {
     if (event.type === 'partial_text') this.buf += event.text
   }
-  text(): string { return this.buf }
+  text(): string {
+    return this.buf
+  }
 }
 
 function isAbort(err: unknown): boolean {

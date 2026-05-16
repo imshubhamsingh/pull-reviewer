@@ -22,9 +22,7 @@ interface ParsedRun {
   chapters: Tour
 }
 
-type AttemptOutcome =
-  | { ok: true; value: ParsedRun }
-  | { ok: false; error: Error }
+type AttemptOutcome = { ok: true; value: ParsedRun } | { ok: false; error: Error }
 
 /** How many times to re-run the model after a parse/validation failure. */
 const MAX_RETRIES = 2
@@ -44,7 +42,11 @@ export class GeneratedTourSource extends Service implements TourSource {
   }
 
   async tryProduce(opts: GenerateTourOptions): Promise<TourResult> {
-    opts.onEvent?.({ type: 'phase', name: 'Collecting PR context', detail: `${opts.repo} #${opts.prNumber}` })
+    opts.onEvent?.({
+      type: 'phase',
+      name: 'Collecting PR context',
+      detail: `${opts.repo} #${opts.prNumber}`,
+    })
     const ctx = await this.collector.collect(opts.prNumber, opts.repo)
     const settings = this.resolveSettings(opts)
 
@@ -62,7 +64,11 @@ export class GeneratedTourSource extends Service implements TourSource {
     settings: ResolvedSettings,
     opts: GenerateTourOptions,
   ): Promise<ParsedRun> {
-    opts.onEvent?.({ type: 'phase', name: 'Preparing worktree', detail: ctx.headRefOid.slice(0, 7) })
+    opts.onEvent?.({
+      type: 'phase',
+      name: 'Preparing worktree',
+      detail: ctx.headRefOid.slice(0, 7),
+    })
     const worktree = await this.clones.ensureWorktree(ctx.repo, ctx.headRefOid)
     return this.runWithRetries(ctx, settings, opts, worktree)
   }
@@ -83,7 +89,9 @@ export class GeneratedTourSource extends Service implements TourSource {
       lastError = outcome.error
       this.logger.warn('Tour attempt failed', { attempt, err: lastError.message })
     }
-    throw new Error(`Tour generation failed after ${MAX_RETRIES + 1} attempts: ${lastError!.message}`)
+    throw new Error(
+      `Tour generation failed after ${MAX_RETRIES + 1} attempts: ${lastError!.message}`,
+    )
   }
 
   /** Run the model once + parse + validate coverage; never throws — wraps failure in `{ ok: false, error }`. */
@@ -138,7 +146,12 @@ export class GeneratedTourSource extends Service implements TourSource {
     })
   }
 
-  private async persist(ctx: PrContext, run: CliRunResult, chapters: Tour, settings: ResolvedSettings): Promise<TourResult> {
+  private async persist(
+    ctx: PrContext,
+    run: CliRunResult,
+    chapters: Tour,
+    settings: ResolvedSettings,
+  ): Promise<TourResult> {
     const previous = this.store.get(ctx.repo, ctx.number)
     const record = recordFromGeneration({
       ctx,

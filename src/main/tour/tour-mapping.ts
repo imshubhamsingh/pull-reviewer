@@ -22,7 +22,7 @@ export function recordFromGeneration(args: {
     repo: args.ctx.repo,
     prNumber: args.ctx.number,
     headRefOid: args.ctx.headRefOid,
-    baseRefOid: null,             // populated when PrContextCollector exposes baseRefOid (later phase)
+    baseRefOid: null, // populated when PrContextCollector exposes baseRefOid (later phase)
     previousHeadRefOid: args.previousHeadRefOid,
     chapters: args.chapters,
     files: args.ctx.files,

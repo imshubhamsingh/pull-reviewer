@@ -1,0 +1,17 @@
+.vite/
+dist/
+out/
+node_modules/
+coverage/
+pnpm-lock.yaml
+*.min.js
+*.min.css
+
+# Generated / vendor
+.claude/cache/
+thoughts/shared/handoffs/
+thoughts/ledgers/
+
+# LLM prompts — dense type unions and example formatting are intentional;
+# Prettier's reflow makes them harder for the model to follow.
+src/main/tour/prompts/

@@ -26,7 +26,11 @@ export class GitHubCliService extends Service {
     return this.runJson<T>(['pr', 'view', String(prNumber), '-R', repo, '--json', fields.join(',')])
   }
 
-  async prMerge(prNumber: number, repo: string, method: 'squash' | 'merge' | 'rebase'): Promise<void> {
+  async prMerge(
+    prNumber: number,
+    repo: string,
+    method: 'squash' | 'merge' | 'rebase',
+  ): Promise<void> {
     await this.run(['pr', 'merge', String(prNumber), '-R', repo, `--${method}`])
   }
 

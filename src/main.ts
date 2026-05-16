@@ -36,9 +36,7 @@ async function createWindow(): Promise<void> {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     await window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
   } else {
-    await window.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    )
+    await window.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`))
   }
 }
 
@@ -46,31 +44,34 @@ function isExternalUrl(url: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://')
 }
 
-app.whenReady().then(async () => {
-  services = buildServices()
-  apiServer = await startApiServer(services)
+app
+  .whenReady()
+  .then(async () => {
+    services = buildServices()
+    apiServer = await startApiServer(services)
 
-  ipcMain.handle(IPC.GetApiPort, () => apiServer?.port ?? 0)
-  ipcMain.handle(IPC.OpenExternal, async (_event, url: unknown) => {
-    if (typeof url === 'string' && isExternalUrl(url)) await shell.openExternal(url)
+    ipcMain.handle(IPC.GetApiPort, () => apiServer?.port ?? 0)
+    ipcMain.handle(IPC.OpenExternal, async (_event, url: unknown) => {
+      if (typeof url === 'string' && isExternalUrl(url)) await shell.openExternal(url)
+    })
+
+    // Best-effort cleanup of worktrees left behind by crashed prior runs.
+    services.clones.sweepOrphans().catch((err: Error) => {
+      log.warn('Worktree sweep failed', { err: err.message })
+    })
+
+    await createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      }
+    })
   })
-
-  // Best-effort cleanup of worktrees left behind by crashed prior runs.
-  services.clones.sweepOrphans().catch((err: Error) => {
-    log.warn('Worktree sweep failed', { err: err.message })
+  .catch((err: Error) => {
+    log.error('Startup failed', { err: err.message })
+    app.exit(1)
   })
-
-  await createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
-  })
-}).catch((err: Error) => {
-  log.error('Startup failed', { err: err.message })
-  app.exit(1)
-})
 
 app.on('window-all-closed', () => {
   apiServer?.stop()

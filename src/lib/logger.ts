@@ -46,7 +46,7 @@ class PinoLoggerAdapter implements Logger {
 function createRoot(): PinoLogger {
   return pino({
     level: process.env.LOG_LEVEL ?? 'info',
-    base: undefined,                 // drop hostname/pid; we don't need them in a desktop app
+    base: undefined, // drop hostname/pid; we don't need them in a desktop app
     timestamp: pino.stdTimeFunctions.isoTime,
   })
 }

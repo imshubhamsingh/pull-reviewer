@@ -33,7 +33,8 @@ export class ChatPromptBuilder extends Service {
       systemPrompt,
       template(prContextTemplate, this.contextVars(args.ctx)),
     ]
-    if (args.tour) sections.push(template(tourSummaryTemplate, { tourSummary: renderTourSummary(args.tour) }))
+    if (args.tour)
+      sections.push(template(tourSummaryTemplate, { tourSummary: renderTourSummary(args.tour) }))
     if (args.history.length > 0) sections.push(renderHistory(args.history))
     sections.push(`# Reviewer's question\n${args.newMessage}`)
     return sections.join('\n\n').trim()
@@ -61,18 +62,23 @@ function formatFiles(files: PrContext['files']): string {
  * prompt.
  */
 function renderTourSummary(tour: TourRecord): string {
-  return tour.chapters.map((chapter, i) => {
-    const head = `## Chapter ${i + 1}: ${chapter.title}${chapter.summary ? ` — ${chapter.summary}` : ''}`
-    const steps = chapter.steps.map((s) => `  - ${s.title}${s.code ? ` (${formatCodeRef(s.code)})` : ''}`).join('\n')
-    return `${head}\n${steps}`
-  }).join('\n\n')
+  return tour.chapters
+    .map((chapter, i) => {
+      const head = `## Chapter ${i + 1}: ${chapter.title}${chapter.summary ? ` — ${chapter.summary}` : ''}`
+      const steps = chapter.steps
+        .map((s) => `  - ${s.title}${s.code ? ` (${formatCodeRef(s.code)})` : ''}`)
+        .join('\n')
+      return `${head}\n${steps}`
+    })
+    .join('\n\n')
 }
 
 function formatCodeRef(code: { file: string; lineStart?: number; lineEnd?: number }): string {
   if (code.lineStart == null) return code.file
-  const range = code.lineEnd != null && code.lineEnd !== code.lineStart
-    ? `${code.lineStart}-${code.lineEnd}`
-    : String(code.lineStart)
+  const range =
+    code.lineEnd != null && code.lineEnd !== code.lineStart
+      ? `${code.lineStart}-${code.lineEnd}`
+      : String(code.lineStart)
   return `${code.file}:${range}`
 }
 

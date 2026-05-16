@@ -8,22 +8,22 @@ import { Service } from '@/main/service'
 const CURRENT_SCHEMA_VERSION = 2
 
 export interface TourRecord {
-  prId: string                          // "{repo}#{prNumber}"
+  prId: string // "{repo}#{prNumber}"
   repo: string
   prNumber: number
   headRefOid: string
   baseRefOid: string | null
-  previousHeadRefOid: string | null     // set on regenerate; powers "commits since last tour" delta
-  chapters: Tour                        // chapters-shaped payload (Phase 4)
+  previousHeadRefOid: string | null // set on regenerate; powers "commits since last tour" delta
+  chapters: Tour // chapters-shaped payload (Phase 4)
   files: PrFile[]
-  generatedAt: string                   // ISO 8601
-  lastCheckedAt: string                 // when head_ref_oid was last verified
+  generatedAt: string // ISO 8601
+  lastCheckedAt: string // when head_ref_oid was last verified
   lastAccessedAt: string
   provider: string
   model: string
-  costUsd: number | null                // total cost of the run (null if provider didn't report one)
-  durationMs: number | null             // wall-clock time the model took
-  usage: TokenUsage | null              // raw token counts
+  costUsd: number | null // total cost of the run (null if provider didn't report one)
+  durationMs: number | null // wall-clock time the model took
+  usage: TokenUsage | null // raw token counts
 }
 
 interface Row {
@@ -64,7 +64,9 @@ export class TourStore extends Service {
    */
   get(repo: string, prNumber: number): TourRecord | undefined {
     const id = prId(repo, prNumber)
-    const row = this.db.selectOne<Row>(/* sql */ `SELECT ${COLUMNS} FROM tours WHERE pr_id = ?`, [id])
+    const row = this.db.selectOne<Row>(/* sql */ `SELECT ${COLUMNS} FROM tours WHERE pr_id = ?`, [
+      id,
+    ])
     if (!row || row.schema_version < CURRENT_SCHEMA_VERSION || !row.chapters_json) return undefined
     this.touchAccessed(id)
     return rowToRecord(row)
@@ -116,7 +118,10 @@ export class TourStore extends Service {
   }
 
   touchChecked(repo: string, prNumber: number, at = new Date().toISOString()): void {
-    this.db.update(/* sql */ `UPDATE tours SET last_checked_at = ? WHERE pr_id = ?`, [at, prId(repo, prNumber)])
+    this.db.update(/* sql */ `UPDATE tours SET last_checked_at = ? WHERE pr_id = ?`, [
+      at,
+      prId(repo, prNumber),
+    ])
   }
 
   private touchAccessed(id: string, at = new Date().toISOString()): void {

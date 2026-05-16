@@ -23,14 +23,22 @@ export class ExplainRouter extends Service {
 
     // List all Q&A threads for a PR.
     app.get('/:repoOwner/:repoName/:prNumber/threads', (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       return c.json(this.explain.list(parsed.repo, parsed.prNumber))
     })
 
     // Ask AI a question about a specific line range. Persists as a Q&A thread.
     app.post('/:repoOwner/:repoName/:prNumber/ask', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       const body = await c.req.json<AskBody>().catch((): AskBody | null => null)
       if (!body || !body.sha || !body.file || !body.question) {
@@ -54,7 +62,11 @@ export class ExplainRouter extends Service {
         })
         return c.json(result.thread)
       } catch (err) {
-        this.logger.error('Explain failed', { repo: parsed.repo, file: body.file, err: (err as Error).message })
+        this.logger.error('Explain failed', {
+          repo: parsed.repo,
+          file: body.file,
+          err: (err as Error).message,
+        })
         return c.json({ error: (err as Error).message }, 500)
       }
     })
@@ -62,7 +74,11 @@ export class ExplainRouter extends Service {
     // Streaming variant: SSE with tool_call / partial_text / done / error events
     // so the renderer can show what the model is doing (web search, fetch) live.
     app.post('/:repoOwner/:repoName/:prNumber/ask/stream', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       const body = await c.req.json<AskBody>().catch((): AskBody | null => null)
       if (!body || !body.sha || !body.file || !body.question) {
@@ -91,7 +107,11 @@ export class ExplainRouter extends Service {
           })
           await send('done', result.thread)
         } catch (err) {
-          this.logger.error('Streaming ask failed', { repo: parsed.repo, file: body.file, err: (err as Error).message })
+          this.logger.error('Streaming ask failed', {
+            repo: parsed.repo,
+            file: body.file,
+            err: (err as Error).message,
+          })
           await send('error', { message: (err as Error).message })
         }
       })
@@ -113,7 +133,11 @@ interface ParsedParams {
   prNumber: number
 }
 
-function parseParams(repoOwner: string, repoName: string, prNumberRaw: string): ParsedParams | null {
+function parseParams(
+  repoOwner: string,
+  repoName: string,
+  prNumberRaw: string,
+): ParsedParams | null {
   const prNumber = Number(prNumberRaw)
   if (!Number.isInteger(prNumber) || prNumber <= 0) return null
   return { repo: `${repoOwner}/${repoName}`, prNumber }

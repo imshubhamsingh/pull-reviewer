@@ -43,21 +43,28 @@ const PROVIDERS: Record<Provider, ProviderConfig> = {
     defaultTools: ['Read', 'Grep', 'Glob'],
     args: (model, tools) => [
       '-p',
-      '--output-format', 'stream-json',
+      '--output-format',
+      'stream-json',
       '--verbose',
-      '--allowedTools', tools.join(','),
-      '--model', model,
+      '--allowedTools',
+      tools.join(','),
+      '--model',
+      model,
     ],
   },
   codex: {
     bin: 'codex',
     defaultTools: [],
     args: (model) => [
-      'exec', '-',
+      'exec',
+      '-',
       '--json',
-      '--sandbox', 'read-only',
-      '--ask-for-approval', 'never',
-      '--model', model,
+      '--sandbox',
+      'read-only',
+      '--ask-for-approval',
+      'never',
+      '--model',
+      model,
     ],
   },
 }
@@ -81,7 +88,11 @@ export class CliRunnerService extends Service {
 
     return new Promise((resolve, reject) => {
       const tools = opts.allowedTools ?? config.defaultTools
-      emit({ type: 'phase', name: `Spawning local ${titleCase(opts.provider)} CLI`, detail: opts.model })
+      emit({
+        type: 'phase',
+        name: `Spawning local ${titleCase(opts.provider)} CLI`,
+        detail: opts.model,
+      })
       const child = spawn(config.bin, config.args(opts.model, tools), {
         cwd: opts.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],

@@ -13,8 +13,7 @@ export const reviews = {
     http.post<ReviewDraft>(`/api/reviews/${repo}/${prNumber}/drafts`, input),
   update: (id: number, body: string) =>
     http.patch<ReviewDraft>(`/api/reviews/drafts/${id}`, { body }),
-  remove: (id: number) =>
-    http.del<{ deleted: boolean }>(`/api/reviews/drafts/${id}`),
+  remove: (id: number) => http.del<{ deleted: boolean }>(`/api/reviews/drafts/${id}`),
   submit: (repo: string, prNumber: number, input: SubmitReviewInput) =>
     http.post<SubmittedReview>(`/api/reviews/${repo}/${prNumber}/submit`, input),
 }

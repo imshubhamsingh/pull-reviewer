@@ -1,8 +1,8 @@
 import { useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
-import { PrList } from '@/app/views/PrList'
-import { SettingsView } from '@/app/views/SettingsView'
-import { TourView } from '@/app/views/TourView'
+import { PrList } from '@/app/views/pr-list'
+import { SettingsView } from '@/app/views/settings-view'
+import { TourView } from '@/app/views/tour-view'
 
 type View =
   | { kind: 'list' }
@@ -24,8 +24,6 @@ export function App(): JSX.Element {
     .with({ kind: 'tour' }, ({ repo, prNumber }) => (
       <TourView repo={repo} prNumber={prNumber} onBack={back} />
     ))
-    .with({ kind: 'settings' }, () => (
-      <SettingsView onBack={back} />
-    ))
+    .with({ kind: 'settings' }, () => <SettingsView onBack={back} />)
     .exhaustive()
 }

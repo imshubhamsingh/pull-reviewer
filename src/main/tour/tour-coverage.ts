@@ -22,7 +22,10 @@ const MAX_LISTED = 30
 
 /** Human-readable retry hint listing missing files with actionable guidance. */
 export function coverageRetryHint(missing: string[]): string {
-  const head = missing.slice(0, MAX_LISTED).map((p) => `  - ${p}`).join('\n')
+  const head = missing
+    .slice(0, MAX_LISTED)
+    .map((p) => `  - ${p}`)
+    .join('\n')
   const overflow = missing.length > MAX_LISTED ? `\n  …and ${missing.length - MAX_LISTED} more` : ''
   return [
     `Coverage gap — ${missing.length} file(s) from the diff are not in any step.`,

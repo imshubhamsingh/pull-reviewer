@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MockupSceneSchema } from '@/main/tour/mockup-schema'
 
 /**
  * The wire/storage shape of a generated tour. Defined as one cohesive set of
@@ -7,15 +8,16 @@ import { z } from 'zod'
  *
  * Shape philosophy:
  *  - `panel: 'docs' | 'code' | 'code-map' | 'diagram'` — narration / code / a
- *    file-treemap / a Mermaid diagram. Each carries the fields its renderer
- *    needs and nothing else.
+ *    file-treemap / a Mermaid or mockup diagram. Each carries the fields its
+ *    renderer needs and nothing else.
  *  - Chapters group steps so 25-step tours stay scannable.
  *  - `critique` lives at the chapter level: it's "what's wrong / what could be
  *    better" feedback the reviewer can promote to draft comments later.
  */
 
 export const PANEL_KINDS = ['docs', 'code', 'code-map', 'diagram'] as const
-export const DIAGRAM_KINDS = ['sequence', 'flowchart', 'er', 'class', 'fileGraph'] as const
+export const MERMAID_DIAGRAM_KINDS = ['sequence', 'flowchart', 'er', 'class', 'fileGraph'] as const
+export const DIAGRAM_KINDS = [...MERMAID_DIAGRAM_KINDS, 'mockup'] as const
 export const CRITIQUE_SEVERITIES = ['minor', 'major', 'blocker'] as const
 export const CODE_SIDES = ['before', 'after', 'diff'] as const
 
@@ -34,15 +36,26 @@ const CodePointerSchema = z.object({
   /** Single line the renderer should center / scroll to — usually the call or decision the step is about. Defaults to lineStart. */
   focusLine: z.number().int().nonnegative().optional(),
   /** Up to 10 lines the renderer should emphasise. Clamped to first 10 if the model emits more. */
-  focusLines: z.preprocess(clampArray(10), z.array(z.number().int().nonnegative()).max(10).optional()),
+  focusLines: z.preprocess(
+    clampArray(10),
+    z.array(z.number().int().nonnegative()).max(10).optional(),
+  ),
   /** Extra lines of buffer above/below the [lineStart, lineEnd] window. Renderer hint; defaults to 2. */
   contextLines: z.number().int().nonnegative().max(20).optional(),
 })
 
-const DiagramSchema = z.object({
-  kind: z.enum(DIAGRAM_KINDS),
-  mermaid: z.string().min(1).max(20_000),
-})
+// Discriminated by `kind`. Mermaid variants carry a `mermaid` source string;
+// the `mockup` variant carries a structured `MockupScene` the SVG renderer
+// paints as a Figma-style flow. Existing persisted tours (mermaid-only) parse
+// cleanly under the new union without migration.
+const DiagramSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('sequence'), mermaid: z.string().min(1).max(20_000) }),
+  z.object({ kind: z.literal('flowchart'), mermaid: z.string().min(1).max(20_000) }),
+  z.object({ kind: z.literal('er'), mermaid: z.string().min(1).max(20_000) }),
+  z.object({ kind: z.literal('class'), mermaid: z.string().min(1).max(20_000) }),
+  z.object({ kind: z.literal('fileGraph'), mermaid: z.string().min(1).max(20_000) }),
+  z.object({ kind: z.literal('mockup'), mockup: MockupSceneSchema }),
+])
 
 // `body` is preprocessed → string, with a fallback of '' if the model omits it.
 // We'd rather render an empty narration block than throw the whole tour out
@@ -58,7 +71,9 @@ const TourStepSchema = z
     diagram: DiagramSchema.optional(),
   })
   .refine((s) => s.panel !== 'code' || !!s.code, { message: '`code` panel requires `code`' })
-  .refine((s) => s.panel !== 'diagram' || !!s.diagram, { message: '`diagram` panel requires `diagram`' })
+  .refine((s) => s.panel !== 'diagram' || !!s.diagram, {
+    message: '`diagram` panel requires `diagram`',
+  })
 
 const CritiqueIssueSchema = z.object({
   severity: z.enum(CRITIQUE_SEVERITIES),

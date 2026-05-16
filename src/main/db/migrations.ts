@@ -56,7 +56,10 @@ export function applyMigrations(db: Db, logger: Logger): void {
     logger.info('Applying migration', { id: m.id })
     db.transaction(() => {
       m.applyUp(db)
-      db.insert(/* sql */ `INSERT INTO migrations (id, applied_at) VALUES (?, ?)`, [m.id, new Date().toISOString()])
+      db.insert(/* sql */ `INSERT INTO migrations (id, applied_at) VALUES (?, ?)`, [
+        m.id,
+        new Date().toISOString(),
+      ])
     })
   }
 }

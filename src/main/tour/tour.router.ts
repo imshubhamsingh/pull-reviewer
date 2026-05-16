@@ -20,7 +20,11 @@ export class TourRouter extends Service {
 
     // GET /:owner/:name/:prNumber → cached tour, or 404 if none. Never runs the model.
     app.get('/:repoOwner/:repoName/:prNumber', (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
       const cached = this.tours.get(parsed.repo, parsed.prNumber)
       if (!cached) return c.json({ error: 'no cached tour for this PR' }, 404)
@@ -30,7 +34,11 @@ export class TourRouter extends Service {
     // POST /:owner/:name/:prNumber/generate?force=true → cache hit returns cached (even if stale);
     // ?force=true bypasses cache and runs the model. No cache + no force → also runs the model.
     app.post('/:repoOwner/:repoName/:prNumber/generate', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
 
       const force = c.req.query('force') === 'true'
@@ -48,7 +56,11 @@ export class TourRouter extends Service {
         })
         return c.json(result)
       } catch (err) {
-        this.logger.error('Tour generation failed', { repo: parsed.repo, prNumber: parsed.prNumber, err: (err as Error).message })
+        this.logger.error('Tour generation failed', {
+          repo: parsed.repo,
+          prNumber: parsed.prNumber,
+          err: (err as Error).message,
+        })
         return c.json({ error: (err as Error).message }, 500)
       }
     })
@@ -57,7 +69,11 @@ export class TourRouter extends Service {
     // Stream protocol: one SSE event per CliEvent ('tool_call', 'partial_text', 'final'),
     // followed by a `done` event with the final TourResult, or an `error` event with the message.
     app.post('/:repoOwner/:repoName/:prNumber/generate/stream', async (c) => {
-      const parsed = parseParams(c.req.param('repoOwner'), c.req.param('repoName'), c.req.param('prNumber'))
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
       if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
 
       const force = c.req.query('force') === 'true'
@@ -80,7 +96,11 @@ export class TourRouter extends Service {
           })
           await send('done', result)
         } catch (err) {
-          this.logger.error('Streaming generation failed', { repo: parsed.repo, prNumber: parsed.prNumber, err: (err as Error).message })
+          this.logger.error('Streaming generation failed', {
+            repo: parsed.repo,
+            prNumber: parsed.prNumber,
+            err: (err as Error).message,
+          })
           await send('error', { message: (err as Error).message })
         }
       })
@@ -95,7 +115,11 @@ interface ParsedParams {
   prNumber: number
 }
 
-function parseParams(repoOwner: string, repoName: string, prNumberRaw: string): ParsedParams | null {
+function parseParams(
+  repoOwner: string,
+  repoName: string,
+  prNumberRaw: string,
+): ParsedParams | null {
   const prNumber = Number(prNumberRaw)
   if (!Number.isInteger(prNumber) || prNumber <= 0) return null
   return { repo: `${repoOwner}/${repoName}`, prNumber }

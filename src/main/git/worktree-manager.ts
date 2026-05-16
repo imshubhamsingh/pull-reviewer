@@ -52,10 +52,15 @@ export class WorktreeManager extends Service {
    */
   async ensure(repo: string, sha: string): Promise<string> {
     const wt = this.pathFor(repo, sha)
-    const exists = await fs.stat(wt).then((s) => s.isDirectory()).catch(() => false)
+    const exists = await fs
+      .stat(wt)
+      .then((s) => s.isDirectory())
+      .catch(() => false)
     if (!exists) return this.add(repo, sha)
     const now = new Date()
-    await fs.utimes(wt, now, now).catch(() => { /* mtime bump is best-effort */ })
+    await fs.utimes(wt, now, now).catch(() => {
+      /* mtime bump is best-effort */
+    })
     return wt
   }
 

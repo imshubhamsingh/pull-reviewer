@@ -36,7 +36,14 @@ export class ReviewSubmitter extends Service {
     super()
   }
 
-  async submit({ repo, prNumber, drafts, headSha, summary, event = 'COMMENT' }: SubmitOptions): Promise<SubmittedReview> {
+  async submit({
+    repo,
+    prNumber,
+    drafts,
+    headSha,
+    summary,
+    event = 'COMMENT',
+  }: SubmitOptions): Promise<SubmittedReview> {
     if (drafts.length === 0) throw new Error('No drafts to submit')
 
     const token = await this.auth.getToken()
@@ -75,7 +82,7 @@ export class ReviewSubmitter extends Service {
       throw new Error(`GitHub review POST ${response.status}: ${text}`)
     }
 
-    const data = await response.json() as ReviewResponse
+    const data = (await response.json()) as ReviewResponse
     return { id: data.id, htmlUrl: data.html_url }
   }
 }

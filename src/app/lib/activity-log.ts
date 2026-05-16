@@ -36,7 +36,10 @@ function describe(event: TourStreamEvent | ChatStreamEvent): string | undefined 
       const args = stringifyInput(data.input)
       return args ? `→ ${data.name} ${args}` : `→ ${data.name}`
     })
-    .with({ event: 'phase' }, ({ data }) => `▸ ${data.name}${data.detail ? ` — ${data.detail}` : ''}`)
+    .with(
+      { event: 'phase' },
+      ({ data }) => `▸ ${data.name}${data.detail ? ` — ${data.detail}` : ''}`,
+    )
     .with({ event: 'final' }, () => '✓ composing answer…')
     .with({ event: 'partial_text' }, () => undefined)
     .with({ event: 'done' }, () => undefined)
@@ -50,7 +53,7 @@ function stringifyInput(input: unknown): string {
   if (typeof input !== 'object') return String(input)
   const values = Object.values(input as Record<string, unknown>)
     .filter((v) => v != null && v !== '')
-    .map((v) => typeof v === 'string' ? trim(stripWorktreePath(v), 60) : JSON.stringify(v))
+    .map((v) => (typeof v === 'string' ? trim(stripWorktreePath(v), 60) : JSON.stringify(v)))
   return values.join(' ')
 }
 

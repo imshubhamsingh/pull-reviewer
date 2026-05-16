@@ -48,7 +48,8 @@ export class SettingsRouter extends Service {
         const key = CAMEL_TO_KEY[camel]
         if (!key) return c.json({ error: `unknown setting: ${camel}` }, 400)
         const parsed = SETTINGS_SCHEMA[key].safeParse(value)
-        if (!parsed.success) return c.json({ error: `invalid value for ${camel}: ${parsed.error.message}` }, 400)
+        if (!parsed.success)
+          return c.json({ error: `invalid value for ${camel}: ${parsed.error.message}` }, 400)
         this.store.set(key, parsed.data)
       }
       return c.json(this.readAll())

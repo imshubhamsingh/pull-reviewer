@@ -38,7 +38,8 @@ interface Row {
   created_at: string
 }
 
-const COLUMNS = 'id, repo, pr_number, file, start_line, end_line, question, answer, model, created_at'
+const COLUMNS =
+  'id, repo, pr_number, file, start_line, end_line, question, answer, model, created_at'
 
 export class QaThreadStore extends Service {
   constructor(private readonly db: Db) {

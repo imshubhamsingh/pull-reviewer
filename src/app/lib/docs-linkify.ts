@@ -39,17 +39,29 @@ export function linkify(html: string, sources: LinkifySources): LinkifyResult {
   return { html: linked, pointers }
 }
 
-function collectFromRefs(refs: CodePointer[] | undefined, pointers: CodePointer[], lookup: Map<string, number>): void {
+function collectFromRefs(
+  refs: CodePointer[] | undefined,
+  pointers: CodePointer[],
+  lookup: Map<string, number>,
+): void {
   if (!refs) return
   for (const ref of refs) registerPointer(ref, pointers, lookup)
 }
 
-function collectFromPaths(paths: string[] | undefined, pointers: CodePointer[], lookup: Map<string, number>): void {
+function collectFromPaths(
+  paths: string[] | undefined,
+  pointers: CodePointer[],
+  lookup: Map<string, number>,
+): void {
   if (!paths) return
   for (const path of paths) registerPointer({ file: path }, pointers, lookup)
 }
 
-function registerPointer(ref: CodePointer, pointers: CodePointer[], lookup: Map<string, number>): void {
+function registerPointer(
+  ref: CodePointer,
+  pointers: CodePointer[],
+  lookup: Map<string, number>,
+): void {
   const tokens = identifierTokens(ref.file)
   const claimedAny = claimTokens(tokens, lookup, pointers.length)
   if (claimedAny) pointers.push(ref)

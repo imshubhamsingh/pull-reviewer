@@ -5,6 +5,5 @@ export const settings = {
   get: () => http.get<AppSettings>(`/api/settings`),
 
   /** Partial update — server merges and returns the full AppSettings shape. */
-  update: (patch: Partial<AppSettings>) =>
-    http.patch<AppSettings>(`/api/settings`, patch),
+  update: (patch: Partial<AppSettings>) => http.patch<AppSettings>(`/api/settings`, patch),
 }

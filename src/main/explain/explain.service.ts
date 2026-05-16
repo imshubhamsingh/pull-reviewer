@@ -68,18 +68,27 @@ export class ExplainService extends Service {
     })
     const model = input.model ?? DEFAULT_MODEL
     const signal = input.signal ?? new AbortController().signal
-    this.logger.info('Asking AI', { repo: input.repo, prNumber: input.prNumber, file: input.file, lines: `${input.startLine}-${input.endLine}`, qBytes: input.question.length })
+    this.logger.info('Asking AI', {
+      repo: input.repo,
+      prNumber: input.prNumber,
+      file: input.file,
+      lines: `${input.startLine}-${input.endLine}`,
+      qBytes: input.question.length,
+    })
 
     const raw = await withRetry(
-      () => this.cli.run({
-        prompt,
-        provider: 'claude',
-        model,
-        cwd: os.tmpdir(),                          // no worktree needed; web tools only
-        signal,
-        allowedTools: ASK_TOOLS,
-        onEvent: input.onEvent,
-      }).then((r) => r.raw),
+      () =>
+        this.cli
+          .run({
+            prompt,
+            provider: 'claude',
+            model,
+            cwd: os.tmpdir(), // no worktree needed; web tools only
+            signal,
+            allowedTools: ASK_TOOLS,
+            onEvent: input.onEvent,
+          })
+          .then((r) => r.raw),
       ASK_RETRIES,
       signal,
       (attempt, err) => this.logger.warn('Ask AI retry', { attempt, err: err.message }),
@@ -129,7 +138,12 @@ function renderWindow(content: string, startLine: number, endLine: number): stri
     .join('\n')
 }
 
-function formatWindowLine(line: string, lineNum: number, startLine: number, endLine: number): string {
+function formatWindowLine(
+  line: string,
+  lineNum: number,
+  startLine: number,
+  endLine: number,
+): string {
   const marker = lineNum >= startLine && lineNum <= endLine ? '►' : ' '
   return `${marker} ${String(lineNum).padStart(4)}: ${line}`
 }

@@ -111,26 +111,21 @@ export class PrChatStore extends Service {
 
   renameChat(id: number, title: string): PrChatRecord | undefined {
     const now = new Date().toISOString()
-    this.db.update(
-      /* sql */ `UPDATE pr_chats SET title = ?, updated_at = ? WHERE id = ?`,
-      [title, now, id],
-    )
+    this.db.update(/* sql */ `UPDATE pr_chats SET title = ?, updated_at = ? WHERE id = ?`, [
+      title,
+      now,
+      id,
+    ])
     return this.findChat(id)
   }
 
   touchChat(id: number): void {
     const now = new Date().toISOString()
-    this.db.update(
-      /* sql */ `UPDATE pr_chats SET updated_at = ? WHERE id = ?`,
-      [now, id],
-    )
+    this.db.update(/* sql */ `UPDATE pr_chats SET updated_at = ? WHERE id = ?`, [now, id])
   }
 
   deleteChat(id: number): boolean {
-    const { changes } = this.db.delete(
-      /* sql */ `DELETE FROM pr_chats WHERE id = ?`,
-      [id],
-    )
+    const { changes } = this.db.delete(/* sql */ `DELETE FROM pr_chats WHERE id = ?`, [id])
     return changes > 0
   }
 
@@ -182,13 +177,22 @@ export class PrChatStore extends Service {
   updateMessage(id: number, fields: UpdateMessageInput): PrChatMessageRecord | undefined {
     const sets: string[] = []
     const params: Record<string, unknown> = { id }
-    if (fields.body !== undefined) { sets.push('body = @body'); params.body = fields.body }
+    if (fields.body !== undefined) {
+      sets.push('body = @body')
+      params.body = fields.body
+    }
     if (fields.references !== undefined) {
       sets.push('references_json = @referencesJson')
       params.referencesJson = fields.references ? JSON.stringify(fields.references) : null
     }
-    if (fields.status !== undefined) { sets.push('status = @status'); params.status = fields.status }
-    if (fields.model !== undefined) { sets.push('model = @model'); params.model = fields.model }
+    if (fields.status !== undefined) {
+      sets.push('status = @status')
+      params.status = fields.status
+    }
+    if (fields.model !== undefined) {
+      sets.push('model = @model')
+      params.model = fields.model
+    }
     if (sets.length === 0) return this.findMessage(id)
     this.db.update(
       /* sql */ `UPDATE pr_chat_messages SET ${sets.join(', ')} WHERE id = @id`,
@@ -206,10 +210,7 @@ export class PrChatStore extends Service {
   }
 
   deleteMessage(id: number): boolean {
-    const { changes } = this.db.delete(
-      /* sql */ `DELETE FROM pr_chat_messages WHERE id = ?`,
-      [id],
-    )
+    const { changes } = this.db.delete(/* sql */ `DELETE FROM pr_chat_messages WHERE id = ?`, [id])
     return changes > 0
   }
 

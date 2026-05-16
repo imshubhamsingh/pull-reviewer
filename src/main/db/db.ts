@@ -33,7 +33,11 @@ export class Db extends Service {
 
   /** Returns the first row or `undefined`. Use for primary-key lookups. */
   selectOne<T>(query: string, params?: Params): T | undefined {
-    return this.observed('selectOne', query, () => callGet(this.handle.prepare(query), params) as T | undefined)
+    return this.observed(
+      'selectOne',
+      query,
+      () => callGet(this.handle.prepare(query), params) as T | undefined,
+    )
   }
 
   insert(query: string, params?: Params): Database.RunResult {

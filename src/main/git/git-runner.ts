@@ -25,7 +25,11 @@ export class GitRunner extends Service {
 
   async runBuffer(args: string[], opts: GitRunOptions = {}): Promise<Buffer> {
     this.logger.info('git', { args, cwd: opts.cwd, encoding: 'buffer' })
-    const { stdout } = await exec('git', args, { cwd: opts.cwd, maxBuffer: MAX_BUFFER, encoding: 'buffer' })
+    const { stdout } = await exec('git', args, {
+      cwd: opts.cwd,
+      maxBuffer: MAX_BUFFER,
+      encoding: 'buffer',
+    })
     return stdout as unknown as Buffer
   }
 
