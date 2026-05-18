@@ -18,6 +18,10 @@ async function createWindow(): Promise<void> {
     width: 1280,
     height: 800,
     title: 'Pull Reviewer',
+    // Linux + Windows pick up the window/taskbar icon from here. macOS uses
+    // the bundle icon in packaged builds and `app.dock.setIcon` in dev (set
+    // once on `whenReady` below).
+    icon: path.join(app.getAppPath(), 'assets/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -33,6 +37,16 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' }
   })
 
+  // Plain `<a href="https://...">` clicks (no `target="_blank"`) would otherwise
+  // navigate the renderer page itself. Intercept and route to the system browser
+  // so the app never reloads into a third-party URL.
+  window.webContents.on('will-navigate', (event, url) => {
+    if (isExternalNavigation(url, window.webContents.getURL())) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     await window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
   } else {
@@ -44,9 +58,31 @@ function isExternalUrl(url: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://')
 }
 
+/**
+ * Treat any http(s) URL whose origin differs from the renderer's current
+ * origin as external. Keeps Vite HMR / localhost reloads and same-page anchor
+ * jumps in-app, while routing real outbound links to the system browser.
+ */
+function isExternalNavigation(target: string, currentUrl: string): boolean {
+  try {
+    const t = new URL(target)
+    if (t.protocol !== 'http:' && t.protocol !== 'https:') return false
+    const c = new URL(currentUrl)
+    return t.origin !== c.origin
+  } catch {
+    return false
+  }
+}
+
 app
   .whenReady()
   .then(async () => {
+    // Override the running Electron binary's dock icon in dev mode. In packaged
+    // builds the bundle's .icns wins, so this call is a no-op there.
+    if (process.platform === 'darwin' && app.dock) {
+      app.dock.setIcon(path.join(app.getAppPath(), 'assets/icon.png'))
+    }
+
     services = buildServices()
     apiServer = await startApiServer(services)
 

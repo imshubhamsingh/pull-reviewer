@@ -1,4 +1,5 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
+import path from 'node:path'
 import { MakerSquirrel } from '@electron-forge/maker-squirrel'
 import { MakerZIP } from '@electron-forge/maker-zip'
 import { MakerDeb } from '@electron-forge/maker-deb'
@@ -12,14 +13,10 @@ const config: ForgeConfig = {
   packagerConfig: {
     name: 'Pull Reviewer',
     asar: true,
+    icon: path.resolve(__dirname, 'assets/icon'),
   },
   rebuildConfig: {},
-  makers: [
-    new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
-  ],
+  makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new VitePlugin({
@@ -27,9 +24,7 @@ const config: ForgeConfig = {
         { entry: 'src/main.ts', config: 'vite.main.config.ts', target: 'main' },
         { entry: 'src/preload.ts', config: 'vite.preload.config.ts', target: 'preload' },
       ],
-      renderer: [
-        { name: 'main_window', config: 'vite.renderer.config.mts' },
-      ],
+      renderer: [{ name: 'main_window', config: 'vite.renderer.config.mts' }],
     }),
     new FusesPlugin({
       version: FuseVersion.V1,
