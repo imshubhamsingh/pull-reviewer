@@ -1,22 +1,34 @@
 import type { JSX } from 'react'
 import { match } from 'ts-pattern'
 import type { MockupElement } from '@/lib/api'
-import { parseSourceRef, type SourceRef } from '@/app/components/mockup-source'
+import { SourceWrap, type JumpSource } from '@/app/components/source-wrap'
 
 /**
  * SVG renderer for each of the 22 mockup primitives. Style is intentionally
  * minimal — black/white/gray wireframe palette via the CSS color tokens
  * (`var(--color-*)`). One small component per primitive; `Element` dispatches
  * via ts-pattern's exhaustive match. When the element carries a `source`
- * annotation, the wrapper makes it clickable + adds a native SVG title.
+ * annotation, `SourceWrap` makes it clickable + adds a native SVG title.
  */
 
-export type JumpSource = (ref: SourceRef) => void
+export type { JumpSource }
 
 interface Props {
   el: MockupElement
   onJumpSource?: JumpSource
 }
+
+// Container / layout / decoration elements — clicking them shouldn't yank
+// the reviewer to source. Frame chrome and the drag interactions feel
+// natural when only INTERACTIVE elements are click-to-jump. Inner children
+// of containers still keep their own per-element source wiring.
+const NON_INTERACTIVE_TYPES = new Set<MockupElement['type']>([
+  'box',
+  'group',
+  'divider',
+  'spacer',
+  'modal',
+])
 
 export function Element({ el, onJumpSource }: Props): JSX.Element {
   const variant = match(el)
@@ -45,28 +57,11 @@ export function Element({ el, onJumpSource }: Props): JSX.Element {
     .with({ type: 'modal' }, (e) => <ModalEl el={e} onJumpSource={onJumpSource} />)
     .with({ type: 'tooltip' }, (e) => <TooltipEl el={e} />)
     .exhaustive()
+  if (NON_INTERACTIVE_TYPES.has(el.type)) return variant
   return (
     <SourceWrap source={el.source} onJumpSource={onJumpSource}>
       {variant}
     </SourceWrap>
-  )
-}
-
-interface SourceWrapProps {
-  source: string | undefined
-  onJumpSource: JumpSource | undefined
-  children: JSX.Element
-}
-
-function SourceWrap({ source, onJumpSource, children }: SourceWrapProps): JSX.Element {
-  if (!source) return children
-  const ref = parseSourceRef(source)
-  const onClick = ref && onJumpSource ? () => onJumpSource(ref) : undefined
-  return (
-    <g style={onClick ? { cursor: 'pointer' } : undefined} onClick={onClick}>
-      <title>{source}</title>
-      {children}
-    </g>
   )
 }
 

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type JSX } from 'react'
 import { marked } from 'marked'
 import { cn } from '@/app/lib/utils'
-import { useCanvasTransform, type CanvasController } from '@/app/hooks/use-canvas-transform'
+import { useCanvasPanZoom } from '@/app/hooks/use-canvas-pan-zoom'
+import { useElementDragOverrides } from '@/app/hooks/use-element-drag-overrides'
+import type { CanvasController } from '@/app/hooks/use-canvas-transform'
 import type { MockupScene, TourStep } from '@/lib/api'
 import {
   autoLayout,
@@ -10,8 +12,12 @@ import {
   type PositionedFrame,
   type SceneBounds,
 } from '@/app/components/mockup-layout'
-import { ArrowHeadMarker, FlowArrow } from '@/app/components/mockup-arrow'
-import { Element, type JumpSource } from '@/app/components/mockup-element'
+import { ArrowHeadMarker, FlowArrow } from '@/app/components/flow-arrow'
+import { Element } from '@/app/components/mockup-element'
+import type { JumpSource } from '@/app/components/source-wrap'
+import { parseSourceRef } from '@/app/components/mockup-source'
+import { CanvasZoomControls } from '@/app/components/canvas-zoom-controls'
+import type { MockupElement } from '@/lib/api'
 
 /**
  * Figma-style flow renderer for a lo-fi UI mockup. Lays out every frame on a
@@ -27,21 +33,26 @@ interface Props {
 }
 
 const FIT_PADDING = 48
-const ZOOM_STEP = 1.25
+const CANVAS_PAD = 600
 
 export function MockupPane({ step, scene, onJumpSource }: Props): JSX.Element {
-  const positioned = useMemo(() => autoLayout(scene), [scene])
-  const bounds = useMemo(() => sceneBounds(positioned), [positioned])
-  const containerRef = useRef<HTMLDivElement>(null)
-  const canvas = useCanvasTransform()
-  const [dragging, setDragging] = useState(false)
-  const fittedRef = useRef<string | null>(null)
+  const baseLayout = useMemo(() => autoLayout(scene), [scene])
+  const { containerRef, canvas, dragging, onMouseDown } = useCanvasPanZoom()
+  const elementDrag = useElementDragOverrides(canvas.transform.scale)
+  const { overrides, onMouseDown: onFrameMouseDown, reset: resetOverrides } = elementDrag
+
+  // New scene → discard any prior drags.
+  useEffect(() => resetOverrides(), [scene, resetOverrides])
+
+  const positioned = useMemo(() => applyOverrides(baseLayout, overrides), [baseLayout, overrides])
+  const layoutBounds = useMemo(() => sceneBounds(positioned), [positioned])
+  const liveBounds = useMemo(() => padBounds(layoutBounds, positioned), [layoutBounds, positioned])
 
   const fit = useCallback(() => {
-    fitScene(containerRef.current, bounds, canvas.setAll)
-  }, [bounds, canvas.setAll])
+    fitScene(containerRef.current, layoutBounds, liveBounds, canvas.setAll)
+  }, [containerRef, layoutBounds, liveBounds, canvas.setAll])
 
-  // Fit on first mount; on scene change refit so a new mockup centers itself.
+  const fittedRef = useRef<string | null>(null)
   useEffect(() => {
     const key = sceneKey(scene)
     if (fittedRef.current === key) return
@@ -51,60 +62,6 @@ export function MockupPane({ step, scene, onJumpSource }: Props): JSX.Element {
     })
     return () => cancelAnimationFrame(raf)
   }, [scene, fit])
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const onWheel = (e: WheelEvent): void => {
-      e.preventDefault()
-      if (e.ctrlKey || e.metaKey) {
-        const factor = Math.exp(-e.deltaY * 0.002)
-        canvas.zoomBy(factor, cursorIn(el, e))
-      } else {
-        canvas.panBy(-e.deltaX, -e.deltaY)
-      }
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [canvas.panBy, canvas.zoomBy])
-
-  const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return
-      dragRef.current = {
-        x: e.clientX,
-        y: e.clientY,
-        tx: canvas.transform.x,
-        ty: canvas.transform.y,
-      }
-      setDragging(true)
-    },
-    [canvas.transform.x, canvas.transform.y],
-  )
-
-  useEffect(() => {
-    if (!dragging) return
-    const onMove = (e: MouseEvent): void => {
-      const d = dragRef.current
-      if (!d) return
-      canvas.update((prev) => ({
-        ...prev,
-        x: d.tx + (e.clientX - d.x),
-        y: d.ty + (e.clientY - d.y),
-      }))
-    }
-    const onUp = (): void => {
-      dragRef.current = null
-      setDragging(false)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [dragging, canvas.update])
 
   const captionHtml = useMemo(() => marked.parse(step.body, { async: false }), [step.body])
 
@@ -120,14 +77,15 @@ export function MockupPane({ step, scene, onJumpSource }: Props): JSX.Element {
           )}
         >
           <CanvasContent
-            bounds={bounds}
+            bounds={liveBounds}
             canvas={canvas}
             positioned={positioned}
             scene={scene}
             onJumpSource={onJumpSource}
+            onFrameMouseDown={onFrameMouseDown}
           />
         </div>
-        <ZoomControls canvas={canvas} onFit={fit} containerRef={containerRef} />
+        <CanvasZoomControls canvas={canvas} onFit={fit} containerRef={containerRef} />
       </div>
       <figcaption
         className="markdown border-border text-text-secondary border-t px-4 py-3 text-xs leading-relaxed"
@@ -143,6 +101,7 @@ interface ContentProps {
   positioned: PositionedFrame[]
   scene: MockupScene
   onJumpSource?: JumpSource
+  onFrameMouseDown: (frameId: string, e: React.MouseEvent) => void
 }
 
 function CanvasContent({
@@ -151,6 +110,7 @@ function CanvasContent({
   positioned,
   scene,
   onJumpSource,
+  onFrameMouseDown,
 }: ContentProps): JSX.Element {
   const { x, y, scale } = canvas.transform
   const w = bounds.w * scale
@@ -184,17 +144,41 @@ function CanvasContent({
           return (
             <FlowArrow
               key={i}
-              from={from}
-              to={to}
-              trigger={t.trigger}
+              from={{
+                x: from.canvasX,
+                y: from.canvasY,
+                w: from.width,
+                h: from.height,
+                titleAbove: FRAME_TITLE_H,
+              }}
+              to={{
+                x: to.canvasX,
+                y: to.canvasY,
+                w: to.width,
+                h: to.height,
+                titleAbove: FRAME_TITLE_H,
+              }}
+              label={t.trigger}
               fromSide={t.fromSide}
               toSide={t.toSide}
             />
           )
         })}
         {positioned.map((f) => (
-          <g key={f.id} transform={`translate(${f.canvasX} ${f.canvasY})`}>
-            <FrameChrome title={f.title} w={f.width} h={f.height} />
+          <g
+            key={f.id}
+            transform={`translate(${f.canvasX} ${f.canvasY})`}
+            onMouseDown={(e) => onFrameMouseDown(f.id, e)}
+            style={{ cursor: 'grab' }}
+          >
+            <title>Drag to reposition</title>
+            <FrameChrome
+              title={f.title}
+              w={f.width}
+              h={f.height}
+              source={dominantSource(f.elements)}
+              onJumpSource={onJumpSource}
+            />
             <svg
               x={0}
               y={0}
@@ -217,9 +201,11 @@ interface ChromeProps {
   title: string
   w: number
   h: number
+  source: string | undefined
+  onJumpSource: JumpSource | undefined
 }
 
-function FrameChrome({ title, w, h }: ChromeProps): JSX.Element {
+function FrameChrome({ title, w, h, source, onJumpSource }: ChromeProps): JSX.Element {
   return (
     <g>
       <rect
@@ -249,95 +235,138 @@ function FrameChrome({ title, w, h }: ChromeProps): JSX.Element {
       >
         {title}
       </text>
+      {source && onJumpSource && (
+        <FrameSourceIcon source={source} w={w} onJumpSource={onJumpSource} />
+      )}
     </g>
   )
 }
 
+function FrameSourceIcon({
+  source,
+  w,
+  onJumpSource,
+}: {
+  source: string
+  w: number
+  onJumpSource: JumpSource
+}): JSX.Element {
+  const cx = w - 14
+  const cy = -FRAME_TITLE_H / 2
+  return (
+    <g
+      onClick={(e) => {
+        e.stopPropagation()
+        const ref = parseSourceRef(source)
+        if (ref) onJumpSource(ref)
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{ cursor: 'pointer' }}
+    >
+      <title>Open source ({source})</title>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={9}
+        fill="var(--color-bg)"
+        stroke="var(--color-border-strong)"
+        strokeWidth={1}
+      />
+      <text
+        x={cx}
+        y={cy + 0.5}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={600}
+        fill="var(--color-text-secondary)"
+      >
+        ↗
+      </text>
+    </g>
+  )
+}
+
+/**
+ * Pick a representative source for the whole frame: the file most frequently
+ * cited by inner elements. Returns the first source pointing to that file so
+ * the view-file icon lands on a real line, not just a path.
+ */
+function dominantSource(elements: MockupElement[]): string | undefined {
+  const counts = new Map<string, number>()
+  const firstByFile = new Map<string, string>()
+  walkSources(elements, (source) => {
+    const ref = parseSourceRef(source)
+    if (!ref) return
+    counts.set(ref.file, (counts.get(ref.file) ?? 0) + 1)
+    if (!firstByFile.has(ref.file)) firstByFile.set(ref.file, source)
+  })
+  let bestFile: string | undefined
+  let bestCount = 0
+  for (const [file, n] of counts) {
+    if (n > bestCount) {
+      bestFile = file
+      bestCount = n
+    }
+  }
+  return bestFile ? firstByFile.get(bestFile) : undefined
+}
+
+function walkSources(elements: MockupElement[], visit: (source: string) => void): void {
+  for (const el of elements) {
+    if (el.source) visit(el.source)
+    if (el.type === 'group' || el.type === 'modal') walkSources(el.children, visit)
+  }
+}
+
 function fitScene(
   container: HTMLDivElement | null,
-  bounds: SceneBounds,
+  layout: SceneBounds,
+  live: SceneBounds,
   setAll: CanvasController['setAll'],
 ): void {
-  if (!container || bounds.w <= 0 || bounds.h <= 0) return
+  if (!container || layout.w <= 0 || layout.h <= 0) return
   const cw = container.clientWidth
   const ch = container.clientHeight
   if (cw <= 0 || ch <= 0) return
-  const scale = Math.min((cw - FIT_PADDING) / bounds.w, (ch - FIT_PADDING) / bounds.h)
+  const scale = Math.min((cw - FIT_PADDING) / layout.w, (ch - FIT_PADDING) / layout.h)
+  // Wrapper top-left sits at liveBounds origin; shift so the layout (un-padded)
+  // diagram lands centred regardless of the surrounding drag padding.
   setAll({
     scale,
-    x: (cw - bounds.w * scale) / 2,
-    y: (ch - bounds.h * scale) / 2,
+    x: (cw - layout.w * scale) / 2 - (layout.x - live.x) * scale,
+    y: (ch - layout.h * scale) / 2 - (layout.y - live.y) * scale,
   })
 }
 
-interface ZoomControlsProps {
-  canvas: CanvasController
-  onFit: () => void
-  containerRef: React.RefObject<HTMLDivElement | null>
-}
-
-function ZoomControls({ canvas, onFit, containerRef }: ZoomControlsProps): JSX.Element {
-  const anchorCenter = (): { x: number; y: number } => {
-    const el = containerRef.current
-    if (!el) return { x: 0, y: 0 }
-    return { x: el.clientWidth / 2, y: el.clientHeight / 2 }
+function padBounds(layout: SceneBounds, positioned: PositionedFrame[]): SceneBounds {
+  let minX = layout.x
+  let minY = layout.y
+  let maxX = layout.x + layout.w
+  let maxY = layout.y + layout.h
+  for (const f of positioned) {
+    if (f.canvasX < minX) minX = f.canvasX
+    if (f.canvasY - FRAME_TITLE_H < minY) minY = f.canvasY - FRAME_TITLE_H
+    if (f.canvasX + f.width > maxX) maxX = f.canvasX + f.width
+    if (f.canvasY + f.height > maxY) maxY = f.canvasY + f.height
   }
-  return (
-    <div className="border-border bg-surface/95 absolute right-4 top-4 z-10 flex items-center gap-1 rounded-md border p-1 shadow-lg backdrop-blur-sm">
-      <ZoomBtn
-        onClick={() => canvas.zoomBy(1 / ZOOM_STEP, anchorCenter())}
-        label="−"
-        title="Zoom out"
-      />
-      <button
-        type="button"
-        onClick={onFit}
-        title="Fit to pane"
-        className="text-text-secondary hover:text-text-primary w-14 text-center text-xs tabular-nums transition-colors"
-      >
-        {Math.round(canvas.transform.scale * 100)}%
-      </button>
-      <ZoomBtn onClick={() => canvas.zoomBy(ZOOM_STEP, anchorCenter())} label="+" title="Zoom in" />
-      <span aria-hidden className="bg-border mx-0.5 h-4 w-px" />
-      <button
-        type="button"
-        onClick={onFit}
-        title="Fit to pane"
-        className="text-text-secondary hover:bg-surface-hover hover:text-text-primary rounded px-2 text-[11px] transition-colors"
-      >
-        Fit
-      </button>
-    </div>
-  )
+  return {
+    x: minX - CANVAS_PAD,
+    y: minY - CANVAS_PAD,
+    w: maxX - minX + CANVAS_PAD * 2,
+    h: maxY - minY + CANVAS_PAD * 2,
+  }
 }
 
-function ZoomBtn({
-  onClick,
-  label,
-  title,
-}: {
-  onClick: () => void
-  label: string
-  title: string
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className="text-text-secondary hover:bg-surface-hover hover:text-text-primary flex h-6 w-6 items-center justify-center rounded text-sm transition-colors"
-    >
-      {label}
-    </button>
-  )
-}
-
-function cursorIn(
-  el: HTMLElement,
-  e: { clientX: number; clientY: number },
-): { x: number; y: number } {
-  const rect = el.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+function applyOverrides(
+  positioned: PositionedFrame[],
+  overrides: Map<string, { dx: number; dy: number }>,
+): PositionedFrame[] {
+  if (overrides.size === 0) return positioned
+  return positioned.map((f) => {
+    const o = overrides.get(f.id)
+    return o ? { ...f, canvasX: f.canvasX + o.dx, canvasY: f.canvasY + o.dy } : f
+  })
 }
 
 function sceneKey(scene: MockupScene): string {
