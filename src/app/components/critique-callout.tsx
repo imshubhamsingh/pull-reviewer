@@ -2,31 +2,47 @@ import { match } from 'ts-pattern'
 import type { JSX } from 'react'
 import { lensStyle } from '@/app/components/ai-lens-styles'
 import { MarkdownView } from '@/app/components/markdown-view'
-import type { ChapterCritique, CritiqueIssue, CritiqueSuggestion, Lens } from '@/lib/api'
+import type {
+  ChapterCritique,
+  CodePointer,
+  CritiqueIssue,
+  CritiqueSuggestion,
+  Lens,
+} from '@/lib/api'
 
 interface Props {
   critique: ChapterCritique
+  /** When the row was injected from an AI finding (carries `findingId`), this
+   * makes the file-meta link clickable — same destination as the right-pane
+   * Review tab's row click. */
+  onJumpToFinding?: (findingId: string, code: CodePointer) => void
 }
 
 /** Expanded review-feedback card shown below an active chapter when its badge is clicked. */
-export function CritiqueCallout({ critique }: Props): JSX.Element {
+export function CritiqueCallout({ critique, onJumpToFinding }: Props): JSX.Element {
   if (critique.issues.length === 0 && critique.suggestions.length === 0) return <></>
   return (
     <section className="border-border bg-surface mt-5 space-y-2 rounded-md border p-3">
-      <p className="text-text-secondary text-[10px] tracking-wider uppercase">Critique</p>
+      <p className="text-text-secondary text-[11px] tracking-wider uppercase">Critique</p>
       {critique.issues.map((issue, i) => (
-        <IssueRow key={`i-${i}`} issue={issue} />
+        <IssueRow key={`i-${i}`} issue={issue} onJumpToFinding={onJumpToFinding} />
       ))}
       {critique.suggestions.map((s, i) => (
-        <SuggestionRow key={`s-${i}`} suggestion={s} />
+        <SuggestionRow key={`s-${i}`} suggestion={s} onJumpToFinding={onJumpToFinding} />
       ))}
     </section>
   )
 }
 
-function IssueRow({ issue }: { issue: CritiqueIssue }): JSX.Element {
+function IssueRow({
+  issue,
+  onJumpToFinding,
+}: {
+  issue: CritiqueIssue
+  onJumpToFinding?: (findingId: string, code: CodePointer) => void
+}): JSX.Element {
   return (
-    <div className="flex gap-2 text-xs">
+    <div className="flex gap-2 text-sm">
       <span className="shrink-0" aria-hidden>
         🚩
       </span>
@@ -36,15 +52,21 @@ function IssueRow({ issue }: { issue: CritiqueIssue }): JSX.Element {
           <LensChip lens={issue.lens} />
         </div>
         <Markdown body={issue.body} />
-        <Meta file={issue.code?.file} />
+        <Meta code={issue.code} findingId={issue.findingId} onJumpToFinding={onJumpToFinding} />
       </div>
     </div>
   )
 }
 
-function SuggestionRow({ suggestion }: { suggestion: CritiqueSuggestion }): JSX.Element {
+function SuggestionRow({
+  suggestion,
+  onJumpToFinding,
+}: {
+  suggestion: CritiqueSuggestion
+  onJumpToFinding?: (findingId: string, code: CodePointer) => void
+}): JSX.Element {
   return (
-    <div className="flex gap-2 text-xs">
+    <div className="flex gap-2 text-sm">
       <span className="shrink-0" aria-hidden>
         💡
       </span>
@@ -55,7 +77,11 @@ function SuggestionRow({ suggestion }: { suggestion: CritiqueSuggestion }): JSX.
           </div>
         )}
         <Markdown body={suggestion.body} />
-        <Meta file={suggestion.code?.file} />
+        <Meta
+          code={suggestion.code}
+          findingId={suggestion.findingId}
+          onJumpToFinding={onJumpToFinding}
+        />
       </div>
     </div>
   )
@@ -75,7 +101,7 @@ function LensChip({ lens }: { lens: Lens | undefined }): JSX.Element | null {
   const style = lensStyle(lens)
   return (
     <span
-      className="mr-1 inline-block rounded-sm px-1 py-px text-[10px] font-medium align-middle"
+      className="mr-1 inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium align-middle"
       style={{ background: style.bg, color: style.fg }}
     >
       {style.label}
@@ -92,11 +118,35 @@ function SeverityLabel({ severity }: { severity: CritiqueIssue['severity'] }): J
   return <span className={`${color} mr-1 font-medium`}>{severity}</span>
 }
 
-function Meta({ file }: { file?: string }): JSX.Element | null {
-  if (!file) return null
+function Meta({
+  code,
+  findingId,
+  onJumpToFinding,
+}: {
+  code: CodePointer | undefined
+  findingId: string | undefined
+  onJumpToFinding?: (findingId: string, code: CodePointer) => void
+}): JSX.Element | null {
+  if (!code?.file) return null
+  const lineLabel = code.lineStart != null ? `:${code.lineStart}` : ''
+  // Only AI-stitched rows carry a findingId (model-emitted in-tour critique
+  // doesn't). Without one, no jump destination — render as plain text.
+  const clickable = !!(findingId && onJumpToFinding)
   return (
-    <p className="text-text-muted mt-0.5 font-mono text-[10px]">
-      {file} <span className="text-text-muted ml-2">[Comment]</span>
+    <p className="text-text-muted mt-1 font-mono text-[11px]">
+      {code.file}
+      {lineLabel}
+      {clickable ? (
+        <button
+          type="button"
+          onClick={() => onJumpToFinding!(findingId!, code)}
+          className="text-text-secondary hover:text-text-primary ml-2 underline-offset-2 transition-colors hover:underline"
+        >
+          [Open in code]
+        </button>
+      ) : (
+        <span className="text-text-muted ml-2">[Comment]</span>
+      )}
     </p>
   )
 }

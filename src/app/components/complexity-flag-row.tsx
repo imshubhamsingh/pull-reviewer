@@ -17,20 +17,20 @@ export function ComplexityFlagRow({ flag }: { flag: ComplexityFlag }): JSX.Eleme
   return (
     <li>
       <span
-        className="inline-block rounded-sm px-1.5 py-0.5 text-[9px] font-medium tracking-wider uppercase"
+        className="inline-block rounded-sm px-2 py-0.5 text-[11px] font-medium tracking-wider uppercase"
         style={{ backgroundColor: sev.bg, color: sev.fg }}
       >
         {KIND_LABEL[flag.kind]}
       </span>
-      <MarkdownView body={flag.body} className="text-text-primary mt-1 text-xs leading-relaxed" />
+      <MarkdownView body={flag.body} className="text-text-primary mt-1 text-sm leading-relaxed" />
       {flag.suggestion && (
         <MarkdownView
           body={`**Suggestion:** ${flag.suggestion}`}
-          className="text-text-secondary mt-0.5 text-[11px] leading-relaxed"
+          className="text-text-secondary mt-1 text-[13px] leading-relaxed"
         />
       )}
       {flag.code?.file && (
-        <p className="text-text-muted mt-0.5 font-mono text-[10px]">
+        <p className="text-text-muted mt-1 font-mono text-[11px]">
           {flag.code.file}
           {flag.code.lineStart != null ? `:${flag.code.lineStart}` : ''}
         </p>

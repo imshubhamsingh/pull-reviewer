@@ -19,6 +19,10 @@ interface Props {
   onDeleteQa: (id: number) => Promise<void>
   /** Click on a linkified identifier in the body. Receives the pointer it resolved to. */
   onJumpToRef?: (ref: CodePointer) => void
+  /** Click on a critique row's file-meta link. Resolves through the same
+   * `jumpToFinding` pipeline as the right-pane Review tab — jumps to the
+   * file:line AND auto-expands the inline ✨ AI card on that line. */
+  onJumpToFinding?: (findingId: string, code: CodePointer) => void
 }
 
 /**
@@ -35,6 +39,7 @@ export function DocsPane({
   prShape,
   onDeleteQa,
   onJumpToRef,
+  onJumpToFinding,
 }: Props): JSX.Element {
   const { html, pointers } = useMemo(() => {
     const raw = marked.parse(step.body, { async: false }) as string
@@ -59,7 +64,9 @@ export function DocsPane({
         onClick={handleClick}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      {chapter.critique && <CritiqueCallout critique={chapter.critique} />}
+      {chapter.critique && (
+        <CritiqueCallout critique={chapter.critique} onJumpToFinding={onJumpToFinding} />
+      )}
       {prShape && <PrShapeCallout shape={prShape} className="mt-4" />}
       {qaThreads.length > 0 && (
         <div className="mt-2">

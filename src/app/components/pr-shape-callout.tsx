@@ -23,11 +23,11 @@ export function PrShapeCallout({ shape, className }: Props): JSX.Element {
   return (
     <section
       aria-label="PR shape summary"
-      className={cn('border-border bg-surface mb-4 rounded-md border p-3 text-xs', className)}
+      className={cn('border-border bg-surface mb-4 rounded-md border p-3 text-sm', className)}
     >
       <header className="flex flex-wrap items-center gap-2">
         <span
-          className="rounded-sm px-1.5 py-0.5 text-[10px] font-medium tracking-wider uppercase"
+          className="rounded-sm px-2 py-0.5 text-[11px] font-medium tracking-wider uppercase"
           style={{ backgroundColor: sizeStyle.bg, color: sizeStyle.fg }}
         >
           {sizeStyle.label}
@@ -36,7 +36,7 @@ export function PrShapeCallout({ shape, className }: Props): JSX.Element {
           className="text-text-secondary inline-flex items-center gap-1"
           title="Estimated review time for a lead-engineer-caliber first pass"
         >
-          <Clock size={12} aria-hidden />
+          <Clock size={14} aria-hidden />
           {formatMinutes(shape.reviewMinutes)}
         </span>
         {shape.complexityFlags.length > 0 && (
@@ -47,7 +47,7 @@ export function PrShapeCallout({ shape, className }: Props): JSX.Element {
         )}
         {shape.splitSuggestion && (
           <span className="text-text-muted inline-flex items-center gap-1">
-            <Layers size={12} aria-hidden />
+            <Layers size={14} aria-hidden />
             stacked split suggested
           </span>
         )}

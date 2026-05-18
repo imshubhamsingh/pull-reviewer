@@ -23,22 +23,22 @@ export function SplitSuggestionBlock({
       <button
         type="button"
         onClick={onToggle}
-        className="text-text-secondary hover:text-text-primary inline-flex items-center gap-1 text-[11px] transition-colors"
+        className="text-text-secondary hover:text-text-primary inline-flex items-center gap-1 text-[13px] transition-colors"
       >
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         Proposed stacked-PR split ({stacks.length} stacks)
       </button>
       {open && (
-        <div className="border-border mt-2 rounded-sm border p-2">
+        <div className="border-border mt-2 rounded-sm border p-3 text-sm">
           <p className="text-text-secondary mb-2">{summary}</p>
           <ol className="space-y-2">
             {stacks.map((stack, i) => (
               <li key={i} className="text-text-primary">
-                <span className="text-text-muted mr-1 font-mono text-[10px]">{i + 1}.</span>
+                <span className="text-text-muted mr-1 font-mono text-[11px]">{i + 1}.</span>
                 <span className="font-medium">{stack.title}</span>
-                <p className="text-text-secondary mt-0.5 leading-relaxed">{stack.rationale}</p>
+                <p className="text-text-secondary mt-1 leading-relaxed">{stack.rationale}</p>
                 {stack.files && stack.files.length > 0 && (
-                  <p className="text-text-muted mt-0.5 font-mono text-[10px]">
+                  <p className="text-text-muted mt-1 font-mono text-[11px]">
                     {stack.files.join(' · ')}
                   </p>
                 )}
