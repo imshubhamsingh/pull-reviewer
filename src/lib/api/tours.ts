@@ -3,10 +3,20 @@ import { getBaseUrl, http } from '@/lib/api/base'
 import { openSSE, type SseMessage } from '@/lib/api/sse'
 import type { TokenUsage, TourResult } from '@/lib/api/types'
 
+/**
+ * Identifies which parallel CLI stream a backend event came from. `tour`
+ * is the chapter-emitting generation; `review` is the dedicated AI review
+ * pass. The generating panel splits its display by this tag.
+ */
+export type CliStream = 'tour' | 'review'
+
 /** Event stream emitted by the tour-generation SSE endpoint. Mirrors backend CliEvent + done/error frames. */
 export type TourStreamEvent =
-  | { event: 'tool_call'; data: { type: 'tool_call'; name: string; input: unknown } }
-  | { event: 'partial_text'; data: { type: 'partial_text'; text: string } }
+  | {
+      event: 'tool_call'
+      data: { type: 'tool_call'; name: string; input: unknown; stream?: CliStream }
+    }
+  | { event: 'partial_text'; data: { type: 'partial_text'; text: string; stream?: CliStream } }
   | {
       event: 'final'
       data: {
@@ -15,11 +25,31 @@ export type TourStreamEvent =
         costUsd?: number
         durationMs?: number
         usage?: TokenUsage
+        stream?: CliStream
       }
     }
-  | { event: 'phase'; data: { type: 'phase'; name: string; detail?: string } }
+  | {
+      event: 'phase'
+      data: { type: 'phase'; name: string; detail?: string; stream?: CliStream }
+    }
   | { event: 'done'; data: TourResult }
   | { event: 'error'; data: { message: string } }
+
+export interface TourJobRecord {
+  id: number
+  repo: string
+  prNumber: number
+  headRefOid: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+}
+
+export interface TourJobSummary {
+  job: TourJobRecord
+  lastPhase?: { name: string; detail?: string }
+}
 
 export const tours = {
   /** Returns the cached tour, or rejects with ApiError(404) if none exists. Never runs the model. */
@@ -35,12 +65,38 @@ export const tours = {
   /**
    * Streamed generation — yields tool_call / partial_text / final / phase events while
    * the model runs, then a final 'done' event with the TourResult (or 'error' on failure).
+   *
+   * Routes through the background job manager: if a job is already running
+   * for this PR's current head SHA, the SSE attaches to that job's stream
+   * instead of spawning a new one. Disconnect doesn't cancel the job.
    */
   streamGenerate: (
     repo: string,
     prNumber: number,
     opts: { force?: boolean; signal?: AbortSignal } = {},
   ) => streamTourGeneration(repo, prNumber, opts),
+  /** Background-job APIs. The manager owns CLI lifecycle independent of the renderer. */
+  jobs: {
+    list: () => http.get<TourJobSummary[]>('/api/tours/jobs'),
+    /**
+     * Find the in-flight (running or queued) job for this PR across ANY head
+     * SHA. Used by `useTour` to detect "regen in progress" even when a cached
+     * tour exists for an older SHA.
+     */
+    findActiveForPr: async (
+      repo: string,
+      prNumber: number,
+    ): Promise<TourJobSummary | undefined> => {
+      const all = await http.get<TourJobSummary[]>('/api/tours/jobs')
+      return all.find(
+        (s) =>
+          s.job.repo === repo &&
+          s.job.prNumber === prNumber &&
+          (s.job.status === 'running' || s.job.status === 'queued'),
+      )
+    },
+    streamJob: (jobId: number, signal?: AbortSignal) => streamJobEvents(jobId, signal),
+  },
 }
 
 async function* streamTourGeneration(
@@ -51,6 +107,22 @@ async function* streamTourGeneration(
   const base = await getBaseUrl()
   const url = `${base}/api/tours/${repo}/${prNumber}/generate/stream${opts.force ? '?force=true' : ''}`
   for await (const msg of openSSE(url, { method: 'POST', signal: opts.signal })) {
+    yield decodeStreamEvent(msg)
+  }
+}
+
+/**
+ * Attach to a specific job's event stream via GET /tours/jobs/:id/stream.
+ * Replays buffered events then streams live ones. Disconnect doesn't kill
+ * the job — the manager owns the CLI lifecycle.
+ */
+async function* streamJobEvents(
+  jobId: number,
+  signal?: AbortSignal,
+): AsyncGenerator<TourStreamEvent> {
+  const base = await getBaseUrl()
+  const url = `${base}/api/tours/jobs/${jobId}/stream`
+  for await (const msg of openSSE(url, { method: 'GET', signal })) {
     yield decodeStreamEvent(msg)
   }
 }

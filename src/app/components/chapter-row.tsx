@@ -1,7 +1,7 @@
-import { CheckSquare, Square } from 'lucide-react'
+import { CheckSquare, LayoutTemplate, Share2, Sparkles, Square, Workflow } from 'lucide-react'
 import type { JSX } from 'react'
 import { cn } from '@/app/lib/utils'
-import type { ChapterCritique, TourChapter } from '@/lib/api'
+import type { ChapterCritique, TourChapter, TourStep } from '@/lib/api'
 import type { ChapterNav } from '@/app/hooks/use-chapter-nav'
 
 interface Props {
@@ -34,7 +34,7 @@ export function ChapterRow({
           <span
             aria-hidden
             className={cn(
-              'text-text-muted text-[10px] transition-transform',
+              'text-text-muted text-sm transition-transform',
               expanded ? 'rotate-90' : '',
             )}
           >
@@ -55,6 +55,8 @@ export function ChapterRow({
             <span className="text-text-muted truncate text-xs">— {chapter.summary}</span>
           )}
         </button>
+        <DiagramBadges steps={chapter.steps} />
+        {chapter.critique && <AiFindingsBadge critique={chapter.critique} />}
         {chapter.critique && <CritiqueBadge critique={chapter.critique} />}
         <button
           type="button"
@@ -129,6 +131,99 @@ function CritiqueBadge({ critique }: { critique: ChapterCritique }): JSX.Element
     <span className="bg-surface text-text-secondary shrink-0 rounded-sm px-2 py-0.5 text-[11px]">
       <span aria-hidden>🚩</span> {critique.issues.length} · <span aria-hidden>💡</span>{' '}
       {critique.suggestions.length}
+    </span>
+  )
+}
+
+/**
+ * Flags which diagram kinds a chapter contains — one small pill per distinct
+ * kind so reviewers can scan the chapter list and spot mockups / state
+ * machines / mermaid diagrams at a glance. Multiple steps of the same kind
+ * collapse into one pill with a count suffix.
+ */
+function DiagramBadges({ steps }: { steps: TourStep[] }): JSX.Element {
+  const counts = countDiagramKinds(steps)
+  if (counts.mockup === 0 && counts.state === 0 && counts.mermaid === 0) return <></>
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {counts.mockup > 0 && (
+        <DiagramBadge
+          icon={<LayoutTemplate size={11} aria-hidden />}
+          count={counts.mockup}
+          title={`${counts.mockup} UI mockup${counts.mockup > 1 ? 's' : ''}`}
+        />
+      )}
+      {counts.state > 0 && (
+        <DiagramBadge
+          icon={<Workflow size={11} aria-hidden />}
+          count={counts.state}
+          title={`${counts.state} state machine${counts.state > 1 ? 's' : ''}`}
+        />
+      )}
+      {counts.mermaid > 0 && (
+        <DiagramBadge
+          icon={<Share2 size={11} aria-hidden />}
+          count={counts.mermaid}
+          title={`${counts.mermaid} diagram${counts.mermaid > 1 ? 's' : ''}`}
+        />
+      )}
+    </span>
+  )
+}
+
+function DiagramBadge({
+  icon,
+  count,
+  title,
+}: {
+  icon: JSX.Element
+  count: number
+  title: string
+}): JSX.Element {
+  return (
+    <span
+      title={title}
+      className="bg-surface text-text-secondary inline-flex items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-[11px]"
+    >
+      {icon}
+      {count > 1 && <span>{count}</span>}
+    </span>
+  )
+}
+
+interface DiagramCounts {
+  mockup: number
+  state: number
+  mermaid: number
+}
+
+function countDiagramKinds(steps: TourStep[]): DiagramCounts {
+  const counts: DiagramCounts = { mockup: 0, state: 0, mermaid: 0 }
+  for (const s of steps) {
+    if (!s.diagram) continue
+    if (s.diagram.kind === 'mockup') counts.mockup++
+    else if (s.diagram.kind === 'state') counts.state++
+    else counts.mermaid++
+  }
+  return counts
+}
+
+/**
+ * Counts AI-surfaced critique entries (those carrying a `lens` field —
+ * model-emitted in-tour critique leaves `lens` undefined). Shown only
+ * when at least one AI-sourced item lives in this chapter's critique.
+ */
+function AiFindingsBadge({ critique }: { critique: ChapterCritique }): JSX.Element {
+  const count =
+    critique.issues.filter((i) => i.lens).length + critique.suggestions.filter((s) => s.lens).length
+  if (count === 0) return <></>
+  return (
+    <span
+      title={`${count} AI finding${count === 1 ? '' : 's'} in this chapter`}
+      className="bg-surface text-text-secondary inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1.5 py-0.5 text-[11px]"
+    >
+      <Sparkles size={11} aria-hidden />
+      {count > 1 && <span>{count}</span>}
     </span>
   )
 }

@@ -25,8 +25,26 @@ export function useTour(repo: string, prNumber: number): UseTourResult {
       acRef.current = ac
 
       try {
+        setState({ kind: 'loading' })
+
+        // Active-job-first: if a background job is already running for this
+        // PR (any SHA), attach to its stream and show the generating screen.
+        // This fixes the "cached tour shown during regen" UX bug — when the
+        // user clicks regenerate or navigates back mid-flight, they see live
+        // progress instead of the stale tour.
+        const active = await api.tours.jobs.findActiveForPr(repo, prNumber)
+        if (ac.signal.aborted) return
+        if (active && !force) {
+          setState({ kind: 'generating', events: [] })
+          for await (const msg of api.tours.jobs.streamJob(active.job.id, ac.signal)) {
+            if (handleTerminal(msg, setState)) return
+            setState((s) => appendStreamEvent(s, msg))
+          }
+          return
+        }
+
+        // Normal cache check — only when no active job exists (or force-regen).
         if (!force) {
-          setState({ kind: 'loading' })
           const cached = await tryGetCached(repo, prNumber)
           if (ac.signal.aborted) return
           if (cached) {
@@ -34,6 +52,9 @@ export function useTour(repo: string, prNumber: number): UseTourResult {
             return
           }
         }
+
+        // Kick off (or attach to) a generation. The /generate/stream route
+        // is idempotent via the job manager — concurrent starts dedupe.
         setState({ kind: 'generating', events: [] })
         for await (const msg of api.tours.streamGenerate(repo, prNumber, {
           force,

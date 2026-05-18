@@ -1,4 +1,4 @@
-import { Settings } from 'lucide-react'
+import { RotateCcw, Settings } from 'lucide-react'
 import { useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import { cn } from '@/app/lib/utils'
@@ -42,9 +42,10 @@ export function PrList({ onOpen, onOpenSettings }: Props): JSX.Element {
             type="button"
             onClick={lists.refresh}
             disabled={isLoading}
-            className="text-text-secondary hover:text-text-primary text-xs transition-colors disabled:opacity-40"
+            className="text-text-secondary hover:text-text-primary inline-flex items-center gap-1 text-xs transition-colors disabled:opacity-40"
           >
-            {isLoading ? 'Refreshing…' : '⟳ Refresh'}
+            <RotateCcw size={12} aria-hidden className={isLoading ? 'animate-spin' : ''} />
+            {isLoading ? 'Refreshing…' : 'Refresh'}
           </button>
           <button
             type="button"

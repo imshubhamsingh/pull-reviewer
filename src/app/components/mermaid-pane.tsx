@@ -3,6 +3,7 @@ import mermaid from 'mermaid'
 import { marked } from 'marked'
 import { cn } from '@/app/lib/utils'
 import { useCanvasTransform, type CanvasController } from '@/app/hooks/use-canvas-transform'
+import { sanitizeMermaid } from '@/app/components/mermaid-sanitize'
 import type { TourStep } from '@/lib/api'
 
 mermaid.initialize({
@@ -38,7 +39,7 @@ export function MermaidPane({ step }: Props): JSX.Element {
   const [dragging, setDragging] = useState(false)
   const fittedForRef = useRef<string | null>(null)
   const id = `mermaid-${step.id}`
-  const source = step.diagram && step.diagram.kind !== 'mockup' ? step.diagram.mermaid : undefined
+  const source = step.diagram && 'mermaid' in step.diagram ? step.diagram.mermaid : undefined
 
   useEffect(() => {
     let cancelled = false
@@ -49,7 +50,7 @@ export function MermaidPane({ step }: Props): JSX.Element {
       return
     }
     mermaid
-      .render(id, source)
+      .render(id, sanitizeMermaid(source))
       .then(({ svg }) => {
         if (!cancelled) setState({ kind: 'ok', svg })
       })

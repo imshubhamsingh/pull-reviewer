@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { MockupSceneSchema } from '@/main/tour/mockup-schema'
+import { StateMachineSchema } from '@/main/tour/state-machine-schema'
+import { LENSES } from '@/main/tour/review-schema'
 
 /**
  * The wire/storage shape of a generated tour. Defined as one cohesive set of
@@ -17,7 +19,7 @@ import { MockupSceneSchema } from '@/main/tour/mockup-schema'
 
 export const PANEL_KINDS = ['docs', 'code', 'code-map', 'diagram'] as const
 export const MERMAID_DIAGRAM_KINDS = ['sequence', 'flowchart', 'er', 'class', 'fileGraph'] as const
-export const DIAGRAM_KINDS = [...MERMAID_DIAGRAM_KINDS, 'mockup'] as const
+export const DIAGRAM_KINDS = [...MERMAID_DIAGRAM_KINDS, 'mockup', 'state'] as const
 export const CRITIQUE_SEVERITIES = ['minor', 'major', 'blocker'] as const
 export const CODE_SIDES = ['before', 'after', 'diff'] as const
 
@@ -45,9 +47,10 @@ const CodePointerSchema = z.object({
 })
 
 // Discriminated by `kind`. Mermaid variants carry a `mermaid` source string;
-// the `mockup` variant carries a structured `MockupScene` the SVG renderer
-// paints as a Figma-style flow. Existing persisted tours (mermaid-only) parse
-// cleanly under the new union without migration.
+// `mockup` carries a structured `MockupScene` rendered as a Figma-style flow;
+// `state` carries an XState-shaped machine config rendered as a labeled state
+// graph. Existing persisted tours parse cleanly under the union without
+// migration — added variants are purely additive.
 const DiagramSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('sequence'), mermaid: z.string().min(1).max(20_000) }),
   z.object({ kind: z.literal('flowchart'), mermaid: z.string().min(1).max(20_000) }),
@@ -55,6 +58,7 @@ const DiagramSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('class'), mermaid: z.string().min(1).max(20_000) }),
   z.object({ kind: z.literal('fileGraph'), mermaid: z.string().min(1).max(20_000) }),
   z.object({ kind: z.literal('mockup'), mockup: MockupSceneSchema }),
+  z.object({ kind: z.literal('state'), machine: StateMachineSchema }),
 ])
 
 // `body` is preprocessed → string, with a fallback of '' if the model omits it.
@@ -75,15 +79,22 @@ const TourStepSchema = z
     message: '`diagram` panel requires `diagram`',
   })
 
+// `lens` + `findingId` are populated by the AI review stitcher when an AI
+// finding is injected into a chapter's critique. Model-emitted in-tour
+// critique leaves both undefined and renders unchanged.
 const CritiqueIssueSchema = z.object({
   severity: z.enum(CRITIQUE_SEVERITIES),
   body: z.string().min(1).max(2_000),
   code: CodePointerSchema.optional(),
+  lens: z.enum(LENSES).optional(),
+  findingId: z.string().optional(),
 })
 
 const CritiqueSuggestionSchema = z.object({
   body: z.string().min(1).max(2_000),
   code: CodePointerSchema.optional(),
+  lens: z.enum(LENSES).optional(),
+  findingId: z.string().optional(),
 })
 
 const ChapterCritiqueSchema = z.object({

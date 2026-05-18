@@ -1,9 +1,9 @@
-import { FileText, MessageSquare } from 'lucide-react'
+import { FileText, MessageSquare, Sparkles } from 'lucide-react'
 import { match } from 'ts-pattern'
 import type { JSX, ReactNode } from 'react'
 import { cn } from '@/app/lib/utils'
 
-export type RightPaneMode = 'map' | 'chat'
+export type RightPaneMode = 'map' | 'chat' | 'review'
 
 interface Props {
   mode: RightPaneMode
@@ -12,13 +12,17 @@ interface Props {
 
 const ICON_SIZE = 12
 
-/** Two-button segmented toggle for the right-pane header. */
+/** Three-button segmented toggle for the right-pane header. */
 export function RightPaneToggle({ mode, onChange }: Props): JSX.Element {
   return (
     <div className="border-border flex shrink-0 overflow-hidden rounded-sm border">
       <ToggleButton mode="map" current={mode} onClick={() => onChange('map')}>
         <FileText size={ICON_SIZE} aria-hidden />
         Map
+      </ToggleButton>
+      <ToggleButton mode="review" current={mode} onClick={() => onChange('review')}>
+        <Sparkles size={ICON_SIZE} aria-hidden />
+        Review
       </ToggleButton>
       <ToggleButton mode="chat" current={mode} onClick={() => onChange('chat')}>
         <MessageSquare size={ICON_SIZE} aria-hidden />
@@ -39,6 +43,7 @@ function ToggleButton({ mode, current, onClick, children }: ToggleButtonProps): 
   const active = mode === current
   const label = match(mode)
     .with('map', () => 'Show file map')
+    .with('review', () => 'Show AI review')
     .with('chat', () => 'Show PR chat')
     .exhaustive()
   return (

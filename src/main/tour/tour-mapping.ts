@@ -1,6 +1,7 @@
 import type { TokenUsage } from '@/main/tour/cli-event'
 import type { Provider } from '@/main/tour/cli-runner.service'
 import type { PrContext } from '@/main/tour/pr-context.collector'
+import type { Review } from '@/main/tour/review-schema'
 import type { Tour } from '@/main/tour/tour-schema'
 import { prId, type TourRecord } from '@/main/tour/tour.store'
 import type { TourResult } from '@/main/tour/tour-source'
@@ -9,6 +10,7 @@ import type { TourResult } from '@/main/tour/tour-source'
 export function recordFromGeneration(args: {
   ctx: PrContext
   chapters: Tour
+  review: Review | null
   previousHeadRefOid: string | null
   provider: Provider
   model: string
@@ -34,6 +36,7 @@ export function recordFromGeneration(args: {
     costUsd: args.costUsd ?? null,
     durationMs: args.durationMs ?? null,
     usage: args.usage ?? null,
+    review: args.review,
   }
 }
 
@@ -54,5 +57,6 @@ export function resultFromRecord(rec: TourRecord, currentHeadRefOid: string): To
     costUsd: rec.costUsd,
     durationMs: rec.durationMs,
     usage: rec.usage,
+    review: rec.review,
   }
 }

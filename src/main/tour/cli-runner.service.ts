@@ -98,7 +98,15 @@ export class CliRunnerService extends Service {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
       child.on('spawn', () => {
-        emit({ type: 'phase', name: 'Running model', detail: `${opts.provider} · ${opts.model}` })
+        // PID + model in one line makes it easy to grep the logs / Activity
+        // Monitor when two CLI streams (tour + review) run in parallel.
+        const pidLabel = child.pid != null ? `pid ${child.pid} · ` : ''
+        emit({
+          type: 'phase',
+          name: 'Running model',
+          detail: `${pidLabel}${opts.provider} · ${opts.model}`,
+        })
+        this.logger.info('CLI spawned', { provider: opts.provider, pid: child.pid })
       })
 
       let stderr = ''

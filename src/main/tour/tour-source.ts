@@ -1,6 +1,7 @@
 import type { CliEvent, TokenUsage } from '@/main/tour/cli-event'
 import type { Provider } from '@/main/tour/cli-runner.service'
 import type { PrFile } from '@/main/tour/pr-context.collector'
+import type { Review } from '@/main/tour/review-schema'
 import type { Tour } from '@/main/tour/tour-schema'
 
 export interface GenerateTourOptions {
@@ -34,6 +35,8 @@ export interface TourResult {
   durationMs: number | null
   /** Raw token counts as reported by the provider. */
   usage: TokenUsage | null
+  /** AI review pass output; null when the dedicated review CLI run failed or hasn't run yet. */
+  review: Review | null
 }
 
 /**

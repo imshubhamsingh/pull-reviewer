@@ -11,6 +11,8 @@ import * as m20260514000001Settings from '@/main/db/migrations/20260514000001-se
 import * as m20260515000000PrRecents from '@/main/db/migrations/20260515000000-pr-recents'
 import * as m20260516000000ChapterCompletions from '@/main/db/migrations/20260516000000-chapter-completions'
 import * as m20260516000001FileReviews from '@/main/db/migrations/20260516000001-file-reviews'
+import * as m20260517000000AiReview from '@/main/db/migrations/20260517000000-ai-review'
+import * as m20260518000000TourJobs from '@/main/db/migrations/20260518000000-tour-jobs'
 
 interface Migration {
   id: string
@@ -33,6 +35,8 @@ const MIGRATIONS: Migration[] = [
   m20260515000000PrRecents,
   m20260516000000ChapterCompletions,
   m20260516000001FileReviews,
+  m20260517000000AiReview,
+  m20260518000000TourJobs,
 ]
 
 export function applyMigrations(db: Db, logger: Logger): void {

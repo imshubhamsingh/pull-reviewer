@@ -22,6 +22,10 @@ export interface PullRequestSummary {
   deletions: number
   changedFiles: number
   reviewDecision: ReviewDecision
+  /** Most-recent commit timestamp on the PR's head branch. */
+  lastCommitAt: string | null
+  /** Submission timestamp of the viewer's latest review on this PR; null if not reviewed. */
+  viewerLatestReviewAt: string | null
 }
 
 export interface CodePointer {
@@ -216,6 +220,35 @@ export interface MockupScene {
   transitions?: MockupTransition[]
 }
 
+/**
+ * State machine wire types — mirrored from
+ * `src/main/tour/state-machine-schema.ts`. XState v5-shaped subset.
+ */
+export interface Transition {
+  target?: string
+  cond?: string
+  actions?: string[]
+  source?: string
+}
+
+export interface StateNode {
+  id?: string
+  type?: 'atomic' | 'compound' | 'final'
+  entry?: string | string[]
+  exit?: string | string[]
+  on?: Record<string, string | Transition | (string | Transition)[]>
+  states?: Record<string, StateNode>
+  initial?: string
+  source?: string
+}
+
+export interface StateMachine {
+  id: string
+  initial: string
+  source?: string
+  states: Record<string, StateNode>
+}
+
 export type Diagram =
   | { kind: 'sequence'; mermaid: string }
   | { kind: 'flowchart'; mermaid: string }
@@ -223,6 +256,7 @@ export type Diagram =
   | { kind: 'class'; mermaid: string }
   | { kind: 'fileGraph'; mermaid: string }
   | { kind: 'mockup'; mockup: MockupScene }
+  | { kind: 'state'; machine: StateMachine }
 
 export interface TourStep {
   id: string
@@ -234,15 +268,68 @@ export interface TourStep {
   diagram?: Diagram
 }
 
+export type Lens =
+  | 'code-quality'
+  | 'business-logic'
+  | 'data-integrity'
+  | 'api-contracts'
+  | 'performance-security'
+  | 'observability'
+  | 'migration'
+  | 'design-system'
+  | 'ux-dx'
+
 export interface CritiqueIssue {
   severity: 'minor' | 'major' | 'blocker'
   body: string
   code?: CodePointer
+  /** Set when this issue was injected by the AI review stitcher; absent for model-emitted in-tour critique. */
+  lens?: Lens
+  /** Back-pointer to the originating review finding (for dismissals + Convert-to-draft). */
+  findingId?: string
 }
 
 export interface CritiqueSuggestion {
   body: string
   code?: CodePointer
+  lens?: Lens
+  findingId?: string
+}
+
+export interface FindingCode {
+  file: string
+  side?: 'before' | 'after' | 'diff'
+  lineStart?: number
+  lineEnd?: number
+}
+
+export interface SymbolLocation {
+  file: string
+  line: number
+}
+
+export interface Finding {
+  id: string
+  lens: Lens
+  severity: 'minor' | 'major' | 'blocker'
+  body: string
+  code?: FindingCode
+  suggestion?: string
+  /** Click-to-jump symbol table — keys match `` `inline-code` `` spans in body/suggestion. */
+  symbols?: Record<string, SymbolLocation>
+  /** Optional inline Mermaid diagram source for findings that benefit from a visual. */
+  mermaid?: string
+}
+
+export interface SkipReason {
+  lens: Lens
+  reason: string
+}
+
+export interface Review {
+  lensesApplied: Lens[]
+  lensesSkipped: SkipReason[]
+  findings: Finding[]
 }
 
 export interface ChapterCritique {
@@ -287,6 +374,7 @@ export interface TourResult {
   costUsd: number | null
   durationMs: number | null
   usage: TokenUsage | null
+  review: Review | null
 }
 
 export interface FileSnapshot {

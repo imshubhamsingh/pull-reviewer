@@ -11,17 +11,33 @@
  * doing during the 60-120s of generation, and the final cost shows in the
  * tour viewer.
  */
+/**
+ * Identifies which parallel CLI stream an event belongs to. `tour` is the
+ * chapter-emitting generation; `review` is the dedicated AI review pass.
+ * Renderer-side, the generating panel splits into two columns keyed on
+ * this tag. Phase events from GeneratedTourSource that are scope-neutral
+ * (e.g. "Collecting PR context") use `tour` by convention.
+ */
+export type CliStream = 'tour' | 'review'
+
 export type CliEvent =
-  | { type: 'tool_call'; name: string; input: unknown }
-  | { type: 'partial_text'; text: string }
-  | { type: 'final'; raw: string; costUsd?: number; durationMs?: number; usage?: TokenUsage }
+  | { type: 'tool_call'; name: string; input: unknown; stream?: CliStream }
+  | { type: 'partial_text'; text: string; stream?: CliStream }
+  | {
+      type: 'final'
+      raw: string
+      costUsd?: number
+      durationMs?: number
+      usage?: TokenUsage
+      stream?: CliStream
+    }
   /**
    * High-level progress marker emitted by GeneratedTourSource around its slow
    * steps (PR fetch, repo clone, model run, tour parse). Not produced by the
    * CLI itself — exists so the renderer can show what's happening during the
    * 30–60s windows before the model starts emitting tool calls.
    */
-  | { type: 'phase'; name: string; detail?: string }
+  | { type: 'phase'; name: string; detail?: string; stream?: CliStream }
 
 export interface TokenUsage {
   inputTokens: number

@@ -124,5 +124,9 @@ function toSummary(row: Row): PullRequestSummary {
     deletions: row.deletions,
     changedFiles: row.changed_files,
     reviewDecision: row.review_decision,
+    // Recents are the local cache — we don't persist commit / review timing
+    // since these change over time. They're filled in fresh for live tabs.
+    lastCommitAt: null,
+    viewerLatestReviewAt: null,
   }
 }

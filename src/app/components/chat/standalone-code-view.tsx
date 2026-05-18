@@ -1,7 +1,8 @@
-import { X } from 'lucide-react'
+import { FileCode, GitCompareArrows, X } from 'lucide-react'
 import { match } from 'ts-pattern'
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { CodeLines, type ComposerTarget } from '@/app/components/code-lines'
+import { DiffPane } from '@/app/components/diff-pane'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useGutterSelection } from '@/app/hooks/use-gutter-selection'
 import { useShiki } from '@/app/hooks/use-shiki'
@@ -11,14 +12,25 @@ import type { QaThreads } from '@/app/hooks/use-qa-threads'
 import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
 import type { CodeRef, FileSnapshot } from '@/lib/api'
 
+type ViewMode = 'code' | 'diff'
+
 interface Props {
   repo: string
   headSha: string
   baseSha: string | null
+  /** PR number — passed to the Diff pane so it can resolve baseSha from GitHub when missing. */
+  prNumber: number
   ref: CodeRef
+  /** Chapter id the user was viewing when they opened this standalone view — stamped onto any Ask AI thread created here. */
+  chapterId: string | undefined
   drafts: ReviewDrafts
   qa: QaThreads
   onClose: () => void
+  /** PR-wide Code/Diff selection — lifted to tour-view so it persists across navigation. */
+  viewMode: ViewMode
+  onViewModeChange: (m: ViewMode) => void
+  diffLayout: 'split' | 'unified'
+  onDiffLayoutChange: (l: 'split' | 'unified') => void
 }
 
 /**
@@ -32,10 +44,16 @@ export function StandaloneCodeView({
   repo,
   headSha,
   baseSha,
+  prNumber,
   ref,
+  chapterId,
   drafts,
   qa,
   onClose,
+  viewMode,
+  onViewModeChange,
+  diffLayout,
+  onDiffLayoutChange,
 }: Props): JSX.Element {
   const [currentSha, setCurrentSha] = useState(headSha)
   useEffect(() => {
@@ -58,26 +76,47 @@ export function StandaloneCodeView({
   const viewingBase = currentSha !== headSha
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <Header file={ref.file} ref={ref} viewingBase={viewingBase} onClose={onClose} />
+      <Header
+        file={ref.file}
+        ref={ref}
+        viewingBase={viewingBase}
+        mode={viewMode}
+        onModeChange={onViewModeChange}
+        diffLayout={diffLayout}
+        onDiffLayoutChange={onDiffLayoutChange}
+        onClose={onClose}
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {match(snapshot)
-          .with({ kind: 'idle' }, () => <EmptyState>No file selected.</EmptyState>)
-          .with({ kind: 'loading' }, () => <EmptyState>Loading file…</EmptyState>)
-          .with({ kind: 'error' }, ({ message }) => (
-            <EmptyState tone="danger">{message}</EmptyState>
-          ))
-          .with({ kind: 'ready' }, ({ snap }) => (
-            <ReadyBody
-              snap={snap}
-              ref={ref}
-              sha={currentSha}
-              drafts={drafts}
-              qa={qa}
-              hl={hl}
-              viewingBase={viewingBase}
-            />
-          ))
-          .exhaustive()}
+        {viewMode === 'diff' ? (
+          <DiffPane
+            repo={repo}
+            baseSha={baseSha}
+            headSha={headSha}
+            file={ref.file}
+            prNumber={prNumber}
+            layout={diffLayout}
+          />
+        ) : (
+          match(snapshot)
+            .with({ kind: 'idle' }, () => <EmptyState>No file selected.</EmptyState>)
+            .with({ kind: 'loading' }, () => <EmptyState>Loading file…</EmptyState>)
+            .with({ kind: 'error' }, ({ message }) => (
+              <EmptyState tone="danger">{message}</EmptyState>
+            ))
+            .with({ kind: 'ready' }, ({ snap }) => (
+              <ReadyBody
+                snap={snap}
+                ref={ref}
+                sha={currentSha}
+                chapterId={chapterId}
+                drafts={drafts}
+                qa={qa}
+                hl={hl}
+                viewingBase={viewingBase}
+              />
+            ))
+            .exhaustive()
+        )}
       </div>
     </div>
   )
@@ -87,13 +126,23 @@ interface ReadyBodyProps {
   snap: FileSnapshot
   ref: CodeRef
   sha: string
+  chapterId: string | undefined
   drafts: ReviewDrafts
   qa: QaThreads
   hl: ReturnType<typeof useShiki>
   viewingBase: boolean
 }
 
-function ReadyBody({ snap, ref, sha, drafts, qa, hl, viewingBase }: ReadyBodyProps): JSX.Element {
+function ReadyBody({
+  snap,
+  ref,
+  sha,
+  chapterId,
+  drafts,
+  qa,
+  hl,
+  viewingBase,
+}: ReadyBodyProps): JSX.Element {
   const [composer, setComposer] = useState<ComposerTarget | null>(null)
   const selection = useGutterSelection({
     onCommit: (range) => setComposer({ startLine: range.startLine, endLine: range.endLine }),
@@ -137,7 +186,9 @@ function ReadyBody({ snap, ref, sha, drafts, qa, hl, viewingBase }: ReadyBodyPro
         setComposer(null)
         selection.clear()
       }}
-      onAskAiStream={(input, onEvent) => qa.askStream(input, { onEvent })}
+      onAskAiStream={(input, onEvent) =>
+        qa.askStream({ ...input, chapterId: chapterId ?? null }, { onEvent })
+      }
       onSaveDraft={async (target, body) => {
         const lo = Math.min(target.startLine, target.endLine)
         const hi = Math.max(target.startLine, target.endLine)
@@ -155,6 +206,7 @@ function ReadyBody({ snap, ref, sha, drafts, qa, hl, viewingBase }: ReadyBodyPro
         selection.clear()
       }}
       onUpdateDraft={drafts.update}
+      onReanchorDraft={drafts.reanchor}
       onDeleteDraft={drafts.remove}
     />
   )
@@ -170,30 +222,64 @@ function Header({
   file,
   ref,
   viewingBase,
+  mode,
+  onModeChange,
+  diffLayout,
+  onDiffLayoutChange,
   onClose,
 }: {
   file: string
   ref: CodeRef
   viewingBase: boolean
+  mode: ViewMode
+  onModeChange: (m: ViewMode) => void
+  diffLayout: 'split' | 'unified'
+  onDiffLayoutChange: (l: 'split' | 'unified') => void
   onClose: () => void
 }): JSX.Element {
   return (
-    <div className="border-border bg-surface flex shrink-0 items-center justify-between border-b px-3 py-1.5">
+    <div className="border-border bg-surface flex shrink-0 items-center justify-between gap-3 border-b px-3 py-1.5">
       <div className="min-w-0 flex-1 truncate font-mono text-xs">
         <span className="text-text-secondary">{file}</span>
         <span className="text-text-muted">:{formatRange(ref)}</span>
       </div>
       {viewingBase && (
         <span
-          className="text-amber-400 shrink-0 px-2 text-[10px] tracking-wider uppercase"
+          className="shrink-0 px-2 text-[10px] tracking-wider text-amber-400 uppercase"
           title="File deleted in this PR — showing pre-deletion contents from the base sha"
         >
           Base · before
         </span>
       )}
-      <span className="text-text-muted shrink-0 px-2 text-[10px] tracking-wider uppercase">
+      <span className="text-text-muted shrink-0 text-[10px] tracking-wider uppercase">
         From chat
       </span>
+      {mode === 'diff' && (
+        <div className="border-border flex shrink-0 overflow-hidden rounded-sm border">
+          <ViewToggleBtn
+            active={diffLayout === 'split'}
+            onClick={() => onDiffLayoutChange('split')}
+          >
+            Split
+          </ViewToggleBtn>
+          <ViewToggleBtn
+            active={diffLayout === 'unified'}
+            onClick={() => onDiffLayoutChange('unified')}
+          >
+            Unified
+          </ViewToggleBtn>
+        </div>
+      )}
+      <div className="border-border flex shrink-0 overflow-hidden rounded-sm border">
+        <ViewToggleBtn active={mode === 'code'} onClick={() => onModeChange('code')}>
+          <FileCode size={12} aria-hidden />
+          Code
+        </ViewToggleBtn>
+        <ViewToggleBtn active={mode === 'diff'} onClick={() => onModeChange('diff')}>
+          <GitCompareArrows size={12} aria-hidden />
+          Diff
+        </ViewToggleBtn>
+      </div>
       <button
         type="button"
         onClick={onClose}
@@ -203,6 +289,32 @@ function Header({
         <X size={14} aria-hidden />
       </button>
     </div>
+  )
+}
+
+function ViewToggleBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'flex items-center gap-1.5 px-2 py-0.5 text-[10px] tracking-wider uppercase transition-colors',
+        active
+          ? 'bg-surface-hover text-text-primary'
+          : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary',
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

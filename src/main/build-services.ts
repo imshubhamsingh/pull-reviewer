@@ -26,6 +26,14 @@ import { ReviewDraftStore } from '@/main/reviews/review-draft.store'
 import { ReviewRouter } from '@/main/reviews/review.router'
 import { ReviewService } from '@/main/reviews/review.service'
 import { ReviewSubmitter } from '@/main/reviews/review.submitter'
+import type { BrowserWindow } from 'electron'
+import { AiFindingDismissalsStore } from '@/main/tour/ai-finding-dismissals.store'
+import { AiReviewPromptBuilder } from '@/main/tour/ai-review-prompt.builder'
+import { TourJobManager } from '@/main/tour/tour-job.manager'
+import { TourJobStore } from '@/main/tour/tour-job.store'
+import { TourNotificationsService } from '@/main/tour/tour-notifications.service'
+import { AiReviewParser } from '@/main/tour/ai-review.parser'
+import { AiReviewService } from '@/main/tour/ai-review.service'
 import { CachedTourSource } from '@/main/tour/cached-tour-source'
 import { ChapterCompletionService } from '@/main/tour/chapter-completion.service'
 import { ChapterCompletionStore } from '@/main/tour/chapter-completion.store'
@@ -49,12 +57,15 @@ export interface Services {
   github: GitHubCliService
   pullRequests: PullRequestService
   tours: TourService
+  tourJobs: TourJobManager
   clones: GitCloneManager
   files: FileSnapshotService
   reviews: ReviewService
   explain: ExplainService
   chats: ChatService
   settings: SettingsStore
+  /** Wired from main.ts after the BrowserWindow is created — used by the tour-job notification handler. */
+  setMainWindow: (w: BrowserWindow) => void
   routers: {
     pullRequests: PullRequestRouter
     tours: TourRouter
@@ -89,6 +100,10 @@ export function buildServices(): Services {
   const worktrees = new WorktreeManager(gitRunner, cloneRegistry)
   const clones = new GitCloneManager(cloneRegistry, blobReader, worktrees)
 
+  const aiReviewPromptBuilder = new AiReviewPromptBuilder()
+  const aiReviewParser = new AiReviewParser()
+  const aiReview = new AiReviewService(aiReviewPromptBuilder, cli, aiReviewParser)
+
   const generatedSource = new GeneratedTourSource(
     collector,
     promptBuilder,
@@ -97,6 +112,7 @@ export function buildServices(): Services {
     tourStore,
     models,
     clones,
+    aiReview,
   )
   const tours = new TourService(cachedSource, generatedSource, tourStore)
 
@@ -128,6 +144,20 @@ export function buildServices(): Services {
   const chapterCompletions = new ChapterCompletionService(chapterCompletionStore)
   const fileReviewStore = new FileReviewStore(db.query)
   const fileReviews = new FileReviewService(fileReviewStore)
+  const aiFindingDismissals = new AiFindingDismissalsStore(db.query)
+
+  // Background job manager — wraps `tours.generate` with persistence, queue,
+  // and a 3-concurrent cap. `onComplete` fires once per job termination
+  // (success, failure, or cancellation) and is wired to the OS-notification
+  // service below.
+  const tourJobStore = new TourJobStore(db.query)
+  // GC old finished jobs on launch — table stays small even after months of use.
+  tourJobStore.gc()
+  let mainWindow: BrowserWindow | undefined
+  const notifications = new TourNotificationsService(() => mainWindow)
+  const tourJobs = new TourJobManager(tours, collector, tourJobStore, (job, tour, err) => {
+    notifications.onJobComplete(job, tour, err)
+  })
 
   return {
     db,
@@ -135,6 +165,10 @@ export function buildServices(): Services {
     github,
     pullRequests,
     tours,
+    tourJobs,
+    setMainWindow: (w: BrowserWindow) => {
+      mainWindow = w
+    },
     clones,
     files,
     reviews,
@@ -143,13 +177,17 @@ export function buildServices(): Services {
     settings,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),
-      tours: new TourRouter(tours),
+      tours: new TourRouter(tours, tourJobs),
       files: new FileRouter(files),
       reviews: new ReviewRouter(reviews),
       explain: new ExplainRouter(explain),
       chats: new ChatRouter(chats),
       settings: new SettingsRouter(settings),
-      reviewProgress: new ReviewProgressRouter(chapterCompletions, fileReviews),
+      reviewProgress: new ReviewProgressRouter(
+        chapterCompletions,
+        fileReviews,
+        aiFindingDismissals,
+      ),
     },
   }
 }

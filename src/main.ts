@@ -30,6 +30,11 @@ async function createWindow(): Promise<void> {
     },
   })
 
+  // Notification click handler in TourNotificationsService needs to focus +
+  // send IPC to this window. Register on create, so macOS's activate flow
+  // (window re-created after all-windows-closed) picks up the new instance.
+  services?.setMainWindow(window)
+
   // Any `target="_blank"` link or `window.open(url)` from the renderer routes
   // to the system default browser instead of spawning a child Electron window.
   window.webContents.setWindowOpenHandler(({ url }) => {

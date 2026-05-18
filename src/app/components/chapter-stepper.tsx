@@ -1,12 +1,13 @@
+import { RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState, type JSX } from 'react'
-import type { TourChapter, TourResult } from '@/lib/api'
+import { ChapterRow } from '@/app/components/chapter-row'
+import { SubmitReviewButton } from '@/app/components/submit-review-button'
 import type { ChapterCompletionsState } from '@/app/hooks/use-chapter-completions'
 import type { ChapterNav } from '@/app/hooks/use-chapter-nav'
 import type { FileCoverage } from '@/app/hooks/use-file-coverage'
 import type { FileReviewsState } from '@/app/hooks/use-file-reviews'
 import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
-import { ChapterRow } from '@/app/components/chapter-row'
-import { SubmitReviewButton } from '@/app/components/submit-review-button'
+import type { TourChapter, TourResult } from '@/lib/api'
 
 interface Props {
   chapters: TourChapter[]
@@ -18,6 +19,8 @@ interface Props {
   completions: ChapterCompletionsState
   fileReviews: FileReviewsState
   coverage: FileCoverage
+  /** Forwarded to the submit-review modal — click "View file" on a comment to jump. */
+  onJumpToFile?: (file: string, line: number) => void
 }
 
 export function ChapterStepper({
@@ -30,6 +33,7 @@ export function ChapterStepper({
   completions,
   fileReviews,
   coverage,
+  onJumpToFile,
 }: Props): JSX.Element {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set([0]))
   const activeChapter = nav.current?.chapterIdx
@@ -49,15 +53,15 @@ export function ChapterStepper({
   }
 
   /**
-   * Marking-or-unmarking a chapter. The unmark path does NOT cascade — file
-   * reviews are preserved so the user keeps their explicit progress even when
-   * they revisit a chapter. The mark path bulk-ticks the chapter's pinned
-   * files and auto-advances to the next chapter's first step.
+   * Mark-or-unmark a chapter. Unmarking does NOT cascade — file reviews are
+   * preserved so the user keeps explicit progress when they revisit. Marking
+   * bulk-ticks the chapter's pinned files and auto-advances to the next
+   * chapter's first step.
    */
   const handleToggleChapter = async (chapterId: string): Promise<void> => {
     const wasComplete = completions.isComplete(chapterId)
     await completions.toggle(chapterId)
-    if (wasComplete) return // un-marking: no cascade, no advance
+    if (wasComplete) return
     const chapterIdx = chapters.findIndex((c) => c.id === chapterId)
     if (chapterIdx < 0) return
     const pinned = coverage.pinnedFilesIn(chapterIdx)
@@ -87,9 +91,7 @@ export function ChapterStepper({
             expanded={expanded.has(i)}
             completed={completions.isComplete(chapter.id)}
             onToggle={() => toggle(i)}
-            onToggleComplete={(id) => {
-              handleToggleChapter(id)
-            }}
+            onToggleComplete={handleToggleChapter}
           />
         ))}
       </ul>
@@ -103,6 +105,7 @@ export function ChapterStepper({
         totalChapters={chapters.length}
         reviewedFiles={reviewedCount}
         totalFiles={tour.files.length}
+        onJumpToFile={onJumpToFile}
       />
     </div>
   )
@@ -118,6 +121,7 @@ interface NavBarProps {
   totalChapters: number
   reviewedFiles: number
   totalFiles: number
+  onJumpToFile?: (file: string, line: number) => void
 }
 
 function NavBar({
@@ -130,9 +134,10 @@ function NavBar({
   totalChapters,
   reviewedFiles,
   totalFiles,
+  onJumpToFile,
 }: NavBarProps): JSX.Element {
   return (
-    <div className="border-border bg-surface flex items-center justify-between gap-4 border-t px-4 py-2">
+    <nav className="border-border bg-surface flex items-center justify-between gap-4 border-t px-4 py-2">
       <div className="flex gap-2">
         <NavButton onClick={nav.prev} disabled={nav.globalIdx === 0}>
           ◀ prev
@@ -154,16 +159,17 @@ function NavBar({
         </span>
       </p>
       <div className="flex items-center gap-3">
-        <SubmitReviewButton repo={repo} tour={tour} drafts={drafts} />
+        <SubmitReviewButton repo={repo} tour={tour} drafts={drafts} onJumpToFile={onJumpToFile} />
         <button
           type="button"
           onClick={onRegenerate}
-          className="text-text-secondary hover:text-text-primary text-xs transition-colors"
+          className="text-text-secondary hover:text-text-primary inline-flex items-center gap-1 text-xs transition-colors"
         >
-          ⟳ regenerate
+          <RotateCcw size={12} aria-hidden />
+          regenerate
         </button>
       </div>
-    </div>
+    </nav>
   )
 }
 

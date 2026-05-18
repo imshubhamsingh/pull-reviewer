@@ -1,48 +1,47 @@
+import { Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
-import type { TourStreamEvent } from '@/lib/api'
+import type { CliStream, TourStreamEvent } from '@/lib/api'
 
 interface Props {
   events: TourStreamEvent[]
   onCancel?: () => void
 }
 
-const TAIL = 6
+const TAIL = 5
 
 interface Phase {
   name: string
   detail?: string
 }
 
+/**
+ * Two-column generating screen — tour gen on the left, AI review on the
+ * right. Each column shows its own phase headline, tool-call counts, and
+ * recent activity tail. Backend tags every CliEvent with `stream: 'tour'`
+ * or `stream: 'review'`; events without a tag default to `tour` (legacy /
+ * pre-parallel events).
+ */
 export function GeneratingPanel({ events, onCancel }: Props): JSX.Element {
   const elapsed = useElapsed()
-  const phase = useMemo(() => latestPhase(events), [events])
-  const toolCounts = useMemo(() => countTools(events), [events])
-  const tail = useMemo(() => recentActivities(events, TAIL), [events])
-  const thinking = useMemo(() => latestThinking(events), [events])
+  const tourEvents = useMemo(() => filterByStream(events, 'tour'), [events])
+  const reviewEvents = useMemo(() => filterByStream(events, 'review'), [events])
+  const reviewActive = reviewEvents.length > 0
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 p-8">
       <Spinner />
-      <div className="text-center">
-        <p className="text-text-primary text-sm font-medium">{phase.name}</p>
-        {phase.detail && <p className="text-text-muted mt-1 font-mono text-xs">{phase.detail}</p>}
+      <p className="text-text-secondary text-xs">{formatElapsed(elapsed)}</p>
+      <div className="grid w-full max-w-4xl grid-cols-1 gap-4 md:grid-cols-2">
+        <StreamColumn title="Tour generation" stream="tour" events={tourEvents} />
+        <StreamColumn
+          title="AI review"
+          stream="review"
+          events={reviewEvents}
+          inactiveLabel={reviewActive ? undefined : 'Standing by…'}
+          icon={<Sparkles size={11} aria-hidden />}
+        />
       </div>
-      <Stats elapsedMs={elapsed} toolCounts={toolCounts} />
-      {tail.length > 0 && (
-        <ul className="text-text-muted mx-auto w-fit max-w-2xl space-y-0.5 font-mono text-xs">
-          {tail.map((line, i) => (
-            <li key={i} className="truncate">
-              {line}
-            </li>
-          ))}
-        </ul>
-      )}
-      {thinking && (
-        <p className="text-text-muted/70 mx-auto max-w-2xl truncate font-mono text-[11px] italic">
-          … {thinking}
-        </p>
-      )}
       {onCancel && (
         <button
           type="button"
@@ -56,32 +55,73 @@ export function GeneratingPanel({ events, onCancel }: Props): JSX.Element {
   )
 }
 
+interface ColumnProps {
+  title: string
+  stream: CliStream
+  events: TourStreamEvent[]
+  /** Shown in place of the activity tail when no events have arrived yet. */
+  inactiveLabel?: string
+  icon?: JSX.Element
+}
+
+function StreamColumn({ title, stream, events, inactiveLabel, icon }: ColumnProps): JSX.Element {
+  const phase = useMemo(() => latestPhase(events), [events])
+  const toolCounts = useMemo(() => countTools(events), [events])
+  const tail = useMemo(() => recentActivities(events, TAIL), [events])
+  const thinking = useMemo(() => latestThinking(events), [events])
+  return (
+    <section className="border-border rounded-md border p-3">
+      <header className="text-text-secondary mb-2 flex items-center gap-1.5 text-[10px] tracking-wider uppercase">
+        {icon}
+        <span>{title}</span>
+      </header>
+      {inactiveLabel ? (
+        <p className="text-text-muted text-xs italic">{inactiveLabel}</p>
+      ) : (
+        <>
+          <p className="text-text-primary text-sm font-medium">{phase.name}</p>
+          {phase.detail && (
+            <p className="text-text-muted mt-0.5 font-mono text-[11px]">{phase.detail}</p>
+          )}
+          {toolCounts.length > 0 && (
+            <p className="text-text-muted mt-1.5 font-mono text-[10px]">
+              {toolCounts.map((t, i) => (
+                <span key={t.name}>
+                  {i > 0 && ' · '}
+                  {t.name.toLowerCase()} <span className="text-text-secondary">{t.count}</span>
+                </span>
+              ))}
+            </p>
+          )}
+          {tail.length > 0 && (
+            <ul className="text-text-muted mt-2 space-y-0.5 font-mono text-[11px]">
+              {tail.map((line, i) => (
+                <li key={i} className="truncate">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
+          {thinking && (
+            <p className="text-text-muted/70 mt-2 line-clamp-2 font-mono text-[10px] italic">
+              … {thinking}
+            </p>
+          )}
+        </>
+      )}
+      <span aria-hidden className="hidden">
+        {stream}
+      </span>
+    </section>
+  )
+}
+
 function Spinner(): JSX.Element {
   return (
     <div
       aria-label="loading"
       className="border-border border-t-text-brand h-10 w-10 animate-spin rounded-full border-2"
     />
-  )
-}
-
-function Stats({
-  elapsedMs,
-  toolCounts,
-}: {
-  elapsedMs: number
-  toolCounts: Array<{ name: string; count: number }>
-}): JSX.Element {
-  return (
-    <div className="text-text-muted flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px]">
-      <span>{formatElapsed(elapsedMs)}</span>
-      {toolCounts.length > 0 && <span aria-hidden>·</span>}
-      {toolCounts.map(({ name, count }) => (
-        <span key={name}>
-          {name.toLowerCase()} <span className="text-text-secondary">{count}</span>
-        </span>
-      ))}
-    </div>
   )
 }
 
@@ -95,15 +135,19 @@ function useElapsed(): number {
   return now - start
 }
 
+function filterByStream(events: TourStreamEvent[], stream: CliStream): TourStreamEvent[] {
+  return events.filter((e) => {
+    if (e.event === 'done' || e.event === 'error') return false
+    const tagged = e.data.stream ?? 'tour' // legacy / pre-parallel events default to tour
+    return tagged === stream
+  })
+}
+
 /**
  * Live "thinking" line — shows the tail of the model's prose narration, not
  * the structured JSON output. Once the model starts the array/object that
  * carries the actual tour (per rules.md, this comes AFTER 1-3 sentences of
  * plain plan), we stop appending to the thinking display.
- *
- * Implementation: accumulate every partial_text fragment in order, drop
- * everything from the first `[` or `{` onward, return the tail of what
- * remains. So you see the model's most recent prose, never the JSON.
  */
 function latestThinking(events: TourStreamEvent[]): string | undefined {
   let acc = ''
@@ -115,7 +159,7 @@ function latestThinking(events: TourStreamEvent[]): string | undefined {
   const prose = (jsonStart >= 0 ? acc.slice(0, jsonStart) : acc).trim()
   if (prose.length < 2) return undefined
   const collapsed = prose.replace(/\s+/g, ' ')
-  return collapsed.length > 120 ? '… ' + collapsed.slice(-119) : collapsed
+  return collapsed.length > 100 ? '… ' + collapsed.slice(-99) : collapsed
 }
 
 function latestPhase(events: TourStreamEvent[]): Phase {
@@ -123,8 +167,7 @@ function latestPhase(events: TourStreamEvent[]): Phase {
     const e = events[i]
     if (e && e.event === 'phase') return { name: e.data.name, detail: e.data.detail }
   }
-  // No phase yet — either generation just started or running against a CLI that doesn't emit phases.
-  return { name: 'Generating tour…' }
+  return { name: 'Starting…' }
 }
 
 function countTools(events: TourStreamEvent[]): Array<{ name: string; count: number }> {
@@ -141,8 +184,6 @@ function isToolCall(e: TourStreamEvent): e is Extract<TourStreamEvent, { event: 
 }
 
 function recentActivities(events: TourStreamEvent[], n: number): string[] {
-  // Skip phase events — the latest phase is already the headline above, so
-  // repeating it in the tail is noise.
   return events
     .filter((e) => e.event !== 'phase')
     .map(describe)
@@ -161,33 +202,22 @@ function describe(e: TourStreamEvent): string | null {
       { event: 'phase' },
       ({ data }) => `▸ ${data.name}${data.detail ? ` — ${data.detail}` : ''}`,
     )
-    .with({ event: 'final' }, () => '✓ model finished — parsing tour…')
+    .with({ event: 'final' }, () => '✓ model finished')
     .with({ event: 'done' }, () => '✓ done')
     .with({ event: 'error' }, ({ data }) => `✗ ${data.message}`)
     .exhaustive()
 }
 
-/**
- * Renders tool arguments as space-separated values — no key= prefixes, no
- * parens. The tool name carries enough context (Read / Grep / Glob); the
- * remaining argument values (paths, patterns) are what the user actually
- * wants to see flow past.
- */
 function stringifyInput(input: unknown): string {
   if (input == null) return ''
-  if (typeof input === 'string') return trim(stripWorktreePath(input), 80)
+  if (typeof input === 'string') return trim(stripWorktreePath(input), 60)
   if (typeof input !== 'object') return String(input)
   const values = Object.values(input as Record<string, unknown>)
     .filter((v) => v != null && v !== '')
-    .map((v) => (typeof v === 'string' ? trim(stripWorktreePath(v), 60) : JSON.stringify(v)))
+    .map((v) => (typeof v === 'string' ? trim(stripWorktreePath(v), 50) : JSON.stringify(v)))
   return values.join(' ')
 }
 
-/**
- * Tool calls run inside `userData/worktrees/{owner}__{name}/code-tour-{sha}/`,
- * so file_path / path values come through as absolute paths into that worktree.
- * Strip the prefix so the activity log shows just the repo-relative path.
- */
 function stripWorktreePath(s: string): string {
   const m = /\/code-tour-[a-f0-9]+\/(.+)$/.exec(s)
   return m?.[1] ?? s

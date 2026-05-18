@@ -1,6 +1,8 @@
 import { match } from 'ts-pattern'
 import type { JSX } from 'react'
-import type { ChapterCritique, CritiqueIssue, CritiqueSuggestion } from '@/lib/api'
+import { lensStyle } from '@/app/components/ai-lens-styles'
+import { MarkdownView } from '@/app/components/markdown-view'
+import type { ChapterCritique, CritiqueIssue, CritiqueSuggestion, Lens } from '@/lib/api'
 
 interface Props {
   critique: ChapterCritique
@@ -28,10 +30,12 @@ function IssueRow({ issue }: { issue: CritiqueIssue }): JSX.Element {
       <span className="shrink-0" aria-hidden>
         🚩
       </span>
-      <div className="grow">
-        <p className="text-text-primary">
-          <SeverityLabel severity={issue.severity} /> {issue.body}
-        </p>
+      <div className="min-w-0 grow">
+        <div className="mb-1 text-text-primary">
+          <SeverityLabel severity={issue.severity} />
+          <LensChip lens={issue.lens} />
+        </div>
+        <Markdown body={issue.body} />
         <Meta file={issue.code?.file} />
       </div>
     </div>
@@ -44,11 +48,38 @@ function SuggestionRow({ suggestion }: { suggestion: CritiqueSuggestion }): JSX.
       <span className="shrink-0" aria-hidden>
         💡
       </span>
-      <div className="grow">
-        <p className="text-text-primary">{suggestion.body}</p>
+      <div className="min-w-0 grow">
+        {suggestion.lens && (
+          <div className="mb-1">
+            <LensChip lens={suggestion.lens} />
+          </div>
+        )}
+        <Markdown body={suggestion.body} />
         <Meta file={suggestion.code?.file} />
       </div>
     </div>
+  )
+}
+
+function Markdown({ body }: { body: string }): JSX.Element {
+  return <MarkdownView body={body} className="text-text-primary" />
+}
+
+/**
+ * Renders the lens chip when the critique entry was injected by the AI
+ * review stitcher. Model-emitted in-tour critique has `lens === undefined`
+ * and renders unchanged (no chip).
+ */
+function LensChip({ lens }: { lens: Lens | undefined }): JSX.Element | null {
+  if (!lens) return null
+  const style = lensStyle(lens)
+  return (
+    <span
+      className="mr-1 inline-block rounded-sm px-1 py-px text-[10px] font-medium align-middle"
+      style={{ background: style.bg, color: style.fg }}
+    >
+      {style.label}
+    </span>
   )
 }
 

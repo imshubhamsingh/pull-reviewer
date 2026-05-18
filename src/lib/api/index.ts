@@ -18,5 +18,5 @@ export const api = { prs, tours, files, reviews, qa, chats, settings, reviewProg
 export { http, getBaseUrl, ApiError } from '@/lib/api/base'
 export type { AskStreamEvent } from '@/lib/api/qa'
 export type { ChatStreamEvent } from '@/lib/api/chats'
-export type { TourStreamEvent } from '@/lib/api/tours'
+export type { CliStream, TourJobRecord, TourJobSummary, TourStreamEvent } from '@/lib/api/tours'
 export type * from '@/lib/api/types'

@@ -105,8 +105,45 @@ function BadgeRow({
     badges.push(<StateBadge key="state" state={pr.state} />)
   }
 
+  // Reviewed-only: if the viewer has reviewed, compare their latest review
+  // time vs the PR's latest commit time so the badge tells them whether the
+  // ball is in the author's court or back in theirs.
+  if (context === 'reviewed' && pr.state === 'OPEN') {
+    const status = reviewStatus(pr.viewerLatestReviewAt, pr.lastCommitAt)
+    if (status) badges.push(status)
+  }
+
   if (badges.length === 0) return null
   return <div className="mt-2 flex flex-wrap gap-1.5">{badges}</div>
+}
+
+function reviewStatus(
+  viewerLatestReviewAt: string | null,
+  lastCommitAt: string | null,
+): JSX.Element | null {
+  if (!viewerLatestReviewAt) return null
+  // Author pushed after the viewer's last review → ball is back in the
+  // viewer's court. Otherwise the viewer is awaiting an author response.
+  if (lastCommitAt && lastCommitAt > viewerLatestReviewAt) {
+    return (
+      <Badge
+        key="rev"
+        tone="warn"
+        title={`Author pushed ${relativeTime(lastCommitAt)} ago — your last review was ${relativeTime(viewerLatestReviewAt)} ago`}
+      >
+        Awaiting your re-review
+      </Badge>
+    )
+  }
+  return (
+    <Badge
+      key="rev"
+      tone="brand"
+      title={`Your last review: ${relativeTime(viewerLatestReviewAt)} ago — no new commits since`}
+    >
+      Review submitted · awaiting author
+    </Badge>
+  )
 }
 
 function StateBadge({ state }: { state: PullRequestSummary['state'] }): JSX.Element {

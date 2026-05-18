@@ -1,8 +1,12 @@
 import type { GitCloneManager } from '@/main/git/clone.manager'
+import type { AiReviewService } from '@/main/tour/ai-review.service'
+import type { CliEvent } from '@/main/tour/cli-event'
 import type { CliRunResult, CliRunnerService, Provider } from '@/main/tour/cli-runner.service'
 import type { ModelCatalog } from '@/main/tour/model-catalog'
 import type { PrContext, PrContextCollector } from '@/main/tour/pr-context.collector'
 import type { PromptBuilder } from '@/main/tour/prompt.builder'
+import type { Review } from '@/main/tour/review-schema'
+import { stitchReview } from '@/main/tour/review-stitcher'
 import { coverageRetryHint, uncoveredFiles } from '@/main/tour/tour-coverage'
 import type { Tour } from '@/main/tour/tour-schema'
 import type { TourParser } from '@/main/tour/tour.parser'
@@ -37,6 +41,7 @@ export class GeneratedTourSource extends Service implements TourSource {
     private readonly store: TourStore,
     private readonly models: ModelCatalog,
     private readonly clones: GitCloneManager,
+    private readonly aiReview: AiReviewService,
   ) {
     super()
   }
@@ -46,31 +51,46 @@ export class GeneratedTourSource extends Service implements TourSource {
       type: 'phase',
       name: 'Collecting PR context',
       detail: `${opts.repo} #${opts.prNumber}`,
+      stream: 'tour',
     })
     const ctx = await this.collector.collect(opts.prNumber, opts.repo)
     const settings = this.resolveSettings(opts)
 
-    const { run, chapters } = await this.generateInsideWorktree(ctx, settings, opts)
-    return this.persist(ctx, run, chapters, settings)
-  }
-
-  /**
-   * Worktree lifecycle wrapper. We do NOT remove the worktree after generation
-   * any more — PR-scoped chat reuses it for the same head sha. The orphan
-   * sweep in WorktreeManager (24h threshold, runs on app start) handles GC.
-   */
-  private async generateInsideWorktree(
-    ctx: PrContext,
-    settings: ResolvedSettings,
-    opts: GenerateTourOptions,
-  ): Promise<ParsedRun> {
     opts.onEvent?.({
       type: 'phase',
       name: 'Preparing worktree',
       detail: ctx.headRefOid.slice(0, 7),
+      stream: 'tour',
     })
     const worktree = await this.clones.ensureWorktree(ctx.repo, ctx.headRefOid)
-    return this.runWithRetries(ctx, settings, opts, worktree)
+
+    // Tour-gen and AI review run in PARALLEL. The review reads the diff
+    // alone (tour summary substitutes to a "running in parallel" note),
+    // so they share the worktree + PrContext but otherwise don't block
+    // each other. Total wall-clock ≈ max(tour, review) instead of their
+    // sum. If the review fails, the tour still ships (`review: null`).
+    const tourPromise = this.runWithRetries(ctx, settings, opts, worktree)
+    const reviewPromise = this.aiReview.generate({
+      ctx,
+      tour: null, // parallel: tour isn't parsed yet
+      provider: settings.provider,
+      model: settings.model,
+      cwd: worktree,
+      signal: settings.signal,
+      onEvent: opts.onEvent,
+    })
+    const [tourRun, review] = await Promise.all([tourPromise, reviewPromise])
+
+    // Stitch AI findings into chapter critique + synthesise a trailing
+    // "Additional review findings" chapter for uncovered files. Cross-
+    // cutting findings stay only in `review.findings` for the right-pane
+    // rollup.
+    const { tour: stitchedChapters } = stitchReview({
+      tour: tourRun.chapters,
+      review,
+      files: ctx.files,
+    })
+    return this.persist(ctx, tourRun.run, stitchedChapters, review, settings)
   }
 
   /** Pure retry loop: each iteration delegates to attemptOnce; failures feed into the next prompt. */
@@ -103,15 +123,16 @@ export class GeneratedTourSource extends Service implements TourSource {
     retryHint: Error | undefined,
     isFinalAttempt: boolean,
   ): Promise<AttemptOutcome> {
+    const tagged = (e: CliEvent): void => opts.onEvent?.({ ...e, stream: 'tour' })
     const run = await this.cli.run({
       prompt: this.promptBuilder.build(ctx, retryHint?.message),
       provider: settings.provider,
       model: settings.model,
       cwd: worktree,
       signal: settings.signal,
-      onEvent: opts.onEvent,
+      onEvent: tagged,
     })
-    opts.onEvent?.({ type: 'phase', name: 'Parsing tour' })
+    tagged({ type: 'phase', name: 'Parsing tour' })
     try {
       const chapters = this.parser.parse(run.raw)
       this.checkCoverage(ctx, chapters, isFinalAttempt)
@@ -143,6 +164,7 @@ export class GeneratedTourSource extends Service implements TourSource {
       type: 'phase',
       name: `Retry ${attempt}/${MAX_RETRIES}`,
       detail: truncate(lastError?.message ?? '', 100),
+      stream: 'tour',
     })
   }
 
@@ -150,12 +172,14 @@ export class GeneratedTourSource extends Service implements TourSource {
     ctx: PrContext,
     run: CliRunResult,
     chapters: Tour,
+    review: Review | null,
     settings: ResolvedSettings,
   ): Promise<TourResult> {
     const previous = this.store.get(ctx.repo, ctx.number)
     const record = recordFromGeneration({
       ctx,
       chapters,
+      review,
       previousHeadRefOid: previous?.headRefOid ?? null,
       provider: settings.provider,
       model: settings.model,
@@ -168,6 +192,7 @@ export class GeneratedTourSource extends Service implements TourSource {
       prNumber: ctx.number,
       chapterCount: chapters.length,
       stepCount: chapters.reduce((n, ch) => n + ch.steps.length, 0),
+      findingCount: review?.findings.length ?? 0,
       costUsd: run.costUsd,
       durationMs: run.durationMs,
     })
