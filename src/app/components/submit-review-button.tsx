@@ -7,6 +7,8 @@ interface Props {
   repo: string
   tour: TourResult
   drafts: ReviewDrafts
+  /** Click "View file" on a comment → close the modal and navigate to file:line. */
+  onJumpToFile?: (file: string, line: number) => void
 }
 
 const SUCCESS_TTL_MS = 8_000
@@ -17,7 +19,7 @@ const SUCCESS_TTL_MS = 8_000
  * to its code snippet before firing the network call. The actual submission
  * only happens from inside the modal.
  */
-export function SubmitReviewButton({ repo, tour, drafts }: Props): JSX.Element {
+export function SubmitReviewButton({ repo, tour, drafts, onJumpToFile }: Props): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [lastSubmittedUrl, setLastSubmittedUrl] = useState<string | undefined>()
@@ -94,6 +96,15 @@ export function SubmitReviewButton({ repo, tour, drafts }: Props): JSX.Element {
           onSubmit={(opts) => {
             submit(opts)
           }}
+          onJumpToFile={
+            onJumpToFile
+              ? (file, line) => {
+                  if (busy) return
+                  setReviewing(false)
+                  onJumpToFile(file, line)
+                }
+              : undefined
+          }
         />
       )}
     </>

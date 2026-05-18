@@ -1,12 +1,14 @@
-import { Fragment, useEffect, useMemo, useRef, type JSX } from 'react'
+import { Sparkles } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { BundledLanguage, Highlighter, ThemedToken } from 'shiki'
 import { cn } from '@/app/lib/utils'
 import { SHIKI_THEME } from '@/app/hooks/use-shiki'
 import type { GutterSelection } from '@/app/hooks/use-gutter-selection'
+import { AiCommentCard } from '@/app/components/ai-comment-card'
 import { DraftRow } from '@/app/components/draft-row'
 import { LineComposer } from '@/app/components/line-composer'
 import type { AskContext } from '@/app/components/ask-ai-panel'
-import type { AskStreamEvent, QaThread, ReviewDraft } from '@/lib/api'
+import type { AskStreamEvent, Finding, QaThread, ReviewDraft, SymbolLocation } from '@/lib/api'
 
 export interface ComposerTarget {
   startLine: number
@@ -27,9 +29,22 @@ interface Props {
   drafts: ReviewDraft[]
   composer: ComposerTarget | null
   selection: GutterSelection
+  /** AI review findings on this file, keyed by `code.lineStart`. Optional. */
+  aiFindingsByLine?: Map<number, Finding[]>
+  /** Set of dismissed finding ids; dismissed findings don't render their gutter ✨. */
+  aiDismissed?: Set<string>
+  /** Set of finding ids already converted to a draft; passed through to the card to disable the button. */
+  aiConverted?: Set<string>
+  /** When set, auto-open the inline card for the finding with this id (e.g., from right-pane jump). */
+  aiPendingExpand?: string | null
+  onAiDismiss?: (findingId: string) => Promise<void> | void
+  onAiUndismiss?: (findingId: string) => Promise<void> | void
+  onAiConvert?: (finding: Finding) => Promise<void> | void
+  onAiJumpSymbol?: (loc: SymbolLocation) => void
   onCloseComposer: () => void
   onSaveDraft: (target: ComposerTarget, body: string) => Promise<void>
   onUpdateDraft: (id: number, body: string) => Promise<void>
+  onReanchorDraft: (id: number, line: number, startLine: number | null) => Promise<void>
   onDeleteDraft: (id: number) => Promise<void>
   onAskAiStream?: (
     input: { file: string; sha: string; startLine: number; endLine: number; question: string },
@@ -56,10 +71,37 @@ export function CodeLines(props: Props): JSX.Element {
     drafts,
     composer,
     selection,
+    aiFindingsByLine,
+    aiDismissed,
+    aiConverted,
+    aiPendingExpand,
+    onAiDismiss,
+    onAiConvert,
+    onAiJumpSymbol,
     onAskAiStream,
   } = props
   const containerRef = useRef<HTMLDivElement>(null)
   const focusSet = focusLines ?? EMPTY_FOCUS
+  const dismissedSet = aiDismissed ?? EMPTY_STRING_SET
+  const convertedSet = aiConverted ?? EMPTY_STRING_SET
+  const aiByLine = aiFindingsByLine ?? EMPTY_AI_MAP
+  // Per-line open state for AI cards. The pending-expand prop seeds this on
+  // mount so click-to-jump from the right-pane lands on an already-open card.
+  const [openAiLines, setOpenAiLines] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    if (!aiPendingExpand) return
+    for (const [line, findings] of aiByLine) {
+      if (findings.some((f) => f.id === aiPendingExpand)) {
+        setOpenAiLines((prev) => {
+          if (prev.has(line)) return prev
+          const next = new Set(prev)
+          next.add(line)
+          return next
+        })
+        break
+      }
+    }
+  }, [aiPendingExpand, aiByLine])
 
   const payload = useMemo<TokensPayload>(() => {
     const safeLang = (
@@ -103,6 +145,23 @@ export function CodeLines(props: Props): JSX.Element {
             const lineNum = idx + 1
             const lineDrafts = drafts.filter((d) => isDraftAnchoredHere(d, lineNum))
             const composerAnchoredHere = composer && composer.endLine === lineNum
+            const lineAi = aiByLine.get(lineNum) ?? []
+            const visibleAi = lineAi.filter((f) => !dismissedSet.has(f.id))
+            const aiIsOpen = openAiLines.has(lineNum)
+            const toggleAi = (): void =>
+              setOpenAiLines((prev) => {
+                const next = new Set(prev)
+                if (next.has(lineNum)) next.delete(lineNum)
+                else next.add(lineNum)
+                return next
+              })
+            const closeAi = (): void =>
+              setOpenAiLines((prev) => {
+                if (!prev.has(lineNum)) return prev
+                const next = new Set(prev)
+                next.delete(lineNum)
+                return next
+              })
             return (
               <Fragment key={lineNum}>
                 <CodeLine
@@ -112,15 +171,35 @@ export function CodeLines(props: Props): JSX.Element {
                   focused={focusSet.has(lineNum)}
                   selected={selection.isInRange(lineNum)}
                   drafted={draftedLines.has(lineNum)}
+                  aiFindingCount={visibleAi.length}
+                  aiIsOpen={aiIsOpen}
+                  onAiToggle={visibleAi.length > 0 ? toggleAi : undefined}
                   onGutterDown={(shift) => selection.start(lineNum, shift)}
                   onGutterEnter={() => selection.extend(lineNum)}
                 />
+                {aiIsOpen &&
+                  visibleAi.map((f) => (
+                    <AiCommentCard
+                      key={f.id}
+                      finding={f}
+                      isConverted={convertedSet.has(f.id)}
+                      isDismissed={dismissedSet.has(f.id)}
+                      onConvert={() => onAiConvert?.(f)}
+                      onDismiss={() => onAiDismiss?.(f.id)}
+                      onClose={closeAi}
+                      onJumpToSymbol={(loc) => onAiJumpSymbol?.(loc)}
+                    />
+                  ))}
                 {lineDrafts.map((d) => (
                   <DraftRow
                     key={d.id}
                     draft={d}
+                    file={file}
+                    sha={sha}
                     onUpdate={props.onUpdateDraft}
+                    onReanchor={props.onReanchorDraft}
                     onDelete={props.onDeleteDraft}
+                    onAskAiStream={onAskAiStream}
                   />
                 ))}
                 {composerAnchoredHere && composer && (
@@ -191,6 +270,12 @@ interface CodeLineProps {
   focused: boolean
   selected: boolean
   drafted: boolean
+  /** How many non-dismissed AI findings exist on this line; 0 hides the ✨ icon. */
+  aiFindingCount: number
+  /** Whether the inline ✨ card(s) for this line are currently expanded. */
+  aiIsOpen: boolean
+  /** Click handler for the ✨ icon. Only wired when `aiFindingCount > 0`. */
+  onAiToggle?: () => void
   onGutterDown: (shiftKey: boolean) => void
   onGutterEnter: () => void
 }
@@ -202,6 +287,9 @@ function CodeLine({
   focused,
   selected,
   drafted,
+  aiFindingCount,
+  aiIsOpen,
+  onAiToggle,
   onGutterDown,
   onGutterEnter,
 }: CodeLineProps): JSX.Element {
@@ -216,6 +304,28 @@ function CodeLine({
         drafted && 'line-drafted',
       )}
     >
+      <span className="flex w-5 shrink-0 items-center justify-center leading-[1.55]">
+        {aiFindingCount > 0 && onAiToggle && (
+          <button
+            type="button"
+            onClick={onAiToggle}
+            title={
+              aiIsOpen
+                ? `Hide AI finding${aiFindingCount > 1 ? 's' : ''}`
+                : `${aiFindingCount} AI finding${aiFindingCount > 1 ? 's' : ''} on line ${lineNum}`
+            }
+            className={cn(
+              'inline-flex items-center gap-0.5 transition-colors',
+              aiIsOpen ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary',
+            )}
+          >
+            <Sparkles size={11} aria-hidden />
+            {aiFindingCount > 1 && (
+              <span className="text-[10px] tabular-nums">{aiFindingCount}</span>
+            )}
+          </button>
+        )}
+      </span>
       <button
         type="button"
         onMouseDown={(e) => {
@@ -250,3 +360,5 @@ function fontStyle(mask: number | undefined): React.CSSProperties['fontStyle'] {
 }
 
 const EMPTY_FOCUS = new Set<number>()
+const EMPTY_STRING_SET = new Set<string>()
+const EMPTY_AI_MAP = new Map<number, Finding[]>()

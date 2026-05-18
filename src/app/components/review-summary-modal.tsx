@@ -1,7 +1,8 @@
-import { X } from 'lucide-react'
+import { ExternalLink, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { cn } from '@/app/lib/utils'
+import { MarkdownView } from '@/app/components/markdown-view'
 import type { ReviewDraft } from '@/lib/api'
 
 export type ReviewEvent = 'COMMENT' | 'REQUEST_CHANGES' | 'APPROVE'
@@ -19,6 +20,8 @@ interface Props {
   error: string | undefined
   onCancel: () => void
   onSubmit: (opts: SubmitOptions) => void
+  /** When set, each comment renders a "View file" affordance that closes the modal and navigates to the file:line in the tour view. */
+  onJumpToFile?: (file: string, line: number) => void
 }
 
 /**
@@ -36,6 +39,7 @@ export function ReviewSummaryModal({
   error,
   onCancel,
   onSubmit,
+  onJumpToFile,
 }: Props): JSX.Element {
   const grouped = useMemo(() => groupByFile(drafts), [drafts])
   const [summary, setSummary] = useState('')
@@ -71,7 +75,14 @@ export function ReviewSummaryModal({
             <p className="text-text-muted py-8 text-center text-sm">No pending comments.</p>
           ) : (
             grouped.map(({ file, drafts: fileDrafts }) => (
-              <FileGroup key={file} file={file} drafts={fileDrafts} repo={repo} sha={sha} />
+              <FileGroup
+                key={file}
+                file={file}
+                drafts={fileDrafts}
+                repo={repo}
+                sha={sha}
+                onJumpToFile={onJumpToFile}
+              />
             ))
           )}
         </div>
@@ -237,11 +248,13 @@ function FileGroup({
   drafts,
   repo,
   sha,
+  onJumpToFile,
 }: {
   file: string
   drafts: ReviewDraft[]
   repo: string
   sha: string
+  onJumpToFile?: (file: string, line: number) => void
 }): JSX.Element {
   const snapshot = useFileSnapshot(repo, sha, file)
   return (
@@ -256,7 +269,11 @@ function FileGroup({
         {drafts.map((d) => (
           <li key={d.id} className="px-3 py-3">
             <Snippet draft={d} snapshot={snapshot} />
-            <CommentBody body={d.body} side={d.side} />
+            <CommentBody
+              body={d.body}
+              side={d.side}
+              onView={onJumpToFile ? () => onJumpToFile(file, d.line) : undefined}
+            />
           </li>
         ))}
       </ul>
@@ -315,15 +332,34 @@ function Snippet({
   )
 }
 
-function CommentBody({ body, side }: { body: string; side: ReviewDraft['side'] }): JSX.Element {
+function CommentBody({
+  body,
+  side,
+  onView,
+}: {
+  body: string
+  side: ReviewDraft['side']
+  onView?: () => void
+}): JSX.Element {
   return (
     <div className="border-border bg-bg rounded-sm border p-2">
-      <p className="text-text-muted mb-1 text-[10px] tracking-wider uppercase">
-        Pending comment{side === 'before' ? ' · before' : ''}
-      </p>
-      <p className="text-text-primary text-xs whitespace-pre-wrap break-words leading-relaxed">
-        {body}
-      </p>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-text-muted text-[10px] tracking-wider uppercase">
+          Pending comment{side === 'before' ? ' · before' : ''}
+        </p>
+        {onView && (
+          <button
+            type="button"
+            onClick={onView}
+            title="Open this file at this line"
+            className="text-text-secondary hover:text-text-primary inline-flex items-center gap-1 text-[10px] normal-case transition-colors"
+          >
+            <ExternalLink size={11} aria-hidden />
+            View file
+          </button>
+        )}
+      </div>
+      <MarkdownView body={body} className="text-text-primary text-xs leading-relaxed break-words" />
     </div>
   )
 }
