@@ -1,11 +1,14 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState, type JSX, type ReactNode } from 'react'
+import { useChatPid } from '@/app/hooks/use-chat-pid'
 import { cn } from '@/app/lib/utils'
 import type { PrChat } from '@/lib/api'
 
 const ICON_SIZE = 14
 
 interface Props {
+  repo: string
+  prNumber: number
   chats: PrChat[]
   activeChatId: number | null
   onSelect: (id: number) => void
@@ -24,6 +27,8 @@ interface Props {
  *   back to the new-chat empty state.
  */
 export function ChatHeader({
+  repo,
+  prNumber,
   chats,
   activeChatId,
   onSelect,
@@ -34,6 +39,7 @@ export function ChatHeader({
   const active = chats.find((c) => c.id === activeChatId) ?? null
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
+  const pid = useChatPid(repo, prNumber, active?.id ?? null)
 
   const startRename = (): void => {
     if (!active) return
@@ -94,6 +100,14 @@ export function ChatHeader({
           </IconButton>
         )}
       </div>
+      {active && pid != null && (
+        <p
+          className="text-text-muted mt-1 font-mono text-[11px]"
+          title="OS pid of the long-lived claude subprocess handling this chat. Stays the same across turns; changes when the process is respawned after death or idle timeout."
+        >
+          · pid {pid}
+        </p>
+      )}
       {renaming && active && (
         <div className="mt-2 flex items-center gap-2">
           <input

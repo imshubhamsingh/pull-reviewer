@@ -40,6 +40,31 @@ export class ChatPromptBuilder extends Service {
     return sections.join('\n\n').trim()
   }
 
+  /**
+   * First-turn payload for a freshly-created `--session-id` session. Same
+   * shape as `build()` but DROPS the conversation-history section — the
+   * session is empty server-side, so there's nothing to replay.
+   */
+  buildPrimer(args: Omit<BuildArgs, 'history'>): string {
+    const sections: string[] = [
+      systemPrompt,
+      template(prContextTemplate, this.contextVars(args.ctx)),
+    ]
+    if (args.tour)
+      sections.push(template(tourSummaryTemplate, { tourSummary: renderTourSummary(args.tour) }))
+    sections.push(`# Reviewer's question\n${args.newMessage}`)
+    return sections.join('\n\n').trim()
+  }
+
+  /**
+   * Resume-turn payload. The claude session has full prior context server-
+   * side via `--resume <uuid>`, so we send just the new reviewer message.
+   * Cheap to compute, cheap on tokens.
+   */
+  buildResume(message: string): string {
+    return `# Reviewer's question\n${message}`
+  }
+
   private contextVars(ctx: PrContext): Record<string, string | number> {
     return {
       title: ctx.title,

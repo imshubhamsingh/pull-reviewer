@@ -1,5 +1,7 @@
+import { match } from 'ts-pattern'
 import { parseChatEnvelope } from '@/main/chat/chat-output'
 import type { ChatPromptBuilder } from '@/main/chat/chat-prompt.builder'
+import type { ChatProcessManager } from '@/main/chat/chat-process.manager'
 import type { PrChatMessageRecord, PrChatRecord, PrChatStore } from '@/main/chat/chat.store'
 import type { GitCloneManager } from '@/main/git/clone.manager'
 import { Service } from '@/main/service'
@@ -47,8 +49,16 @@ export class ChatService extends Service {
     private readonly cli: CliRunnerService,
     private readonly models: ModelCatalog,
     private readonly promptBuilder: ChatPromptBuilder,
+    private readonly processes: ChatProcessManager,
   ) {
     super()
+  }
+
+  /** Returns the OS pid of the long-lived chat subprocess, or null if none is
+   * currently attached (chat hasn't been used yet, child died and is awaiting
+   * lazy respawn, or the provider doesn't use the persistent path). */
+  getPid(chatId: number): number | null {
+    return this.processes.getPid(chatId)
   }
 
   // -------- CRUD pass-throughs ---------
@@ -118,7 +128,23 @@ export class ChatService extends Service {
       const ctx = await this.prContext.collect(chat.prNumber, chat.repo)
       const worktree = await this.clones.ensureWorktree(chat.repo, tour.headRefOid)
       const history = this.boundedHistory(chat.id, userMessage.id)
-      const prompt = this.promptBuilder.build({ ctx, tour, history, newMessage: input.message })
+
+      // Build the right payload for the path we're about to take:
+      //   claude + first turn → primer (system + ctx + tour + new msg, no history;
+      //     claude has no server-side context yet, so we seed it now)
+      //   claude + resume     → just the new message (claude has the full
+      //     conversation server-side via --resume <session_uuid>)
+      //   codex (one-shot)    → legacy full prompt with replayed history
+      const prompt = match({ provider, sessionStarted: chat.sessionStarted })
+        .with({ provider: 'claude', sessionStarted: false }, () =>
+          this.promptBuilder.buildPrimer({ ctx, tour, newMessage: input.message }),
+        )
+        .with({ provider: 'claude', sessionStarted: true }, () =>
+          this.promptBuilder.buildResume(input.message),
+        )
+        .otherwise(() =>
+          this.promptBuilder.build({ ctx, tour, history, newMessage: input.message }),
+        )
 
       this.logger.info('Chat send', {
         chatId: chat.id,
@@ -126,17 +152,42 @@ export class ChatService extends Service {
         prNumber: chat.prNumber,
         historyCount: history.length,
         promptBytes: prompt.length,
+        provider,
+        path:
+          provider === 'claude'
+            ? chat.sessionStarted
+              ? 'persistent-resume'
+              : 'persistent-create'
+            : 'oneshot',
       })
 
-      const run = await this.cli.run({
-        prompt,
-        provider,
-        model,
-        cwd: worktree,
-        signal: input.signal ?? new AbortController().signal,
-        allowedTools: CHAT_TOOLS,
-        onEvent,
-      })
+      // Claude: route through the persistent ChatProcessManager so the
+      // process stays alive across turns (eliminates the per-turn cold start
+      // and lets claude's own auto-cache amortise the system + tour prefix).
+      // Codex: stays on the legacy one-shot cli.run path for now — its CLI
+      // doesn't yet support a stable stream-json input mode.
+      const run =
+        provider === 'claude'
+          ? await this.processes.sendTurn({
+              chatId: chat.id,
+              sessionUuid: this.chats.ensureSessionUuid(chat.id),
+              sessionStarted: chat.sessionStarted,
+              prompt,
+              model,
+              cwd: worktree,
+              signal: input.signal ?? new AbortController().signal,
+              allowedTools: CHAT_TOOLS,
+              onEvent,
+            })
+          : await this.cli.run({
+              prompt,
+              provider,
+              model,
+              cwd: worktree,
+              signal: input.signal ?? new AbortController().signal,
+              allowedTools: CHAT_TOOLS,
+              onEvent,
+            })
 
       const envelope = parseChatEnvelope(run.raw)
       const assistantMessage = this.chats.updateMessage(placeholder.id, {
@@ -145,6 +196,10 @@ export class ChatService extends Service {
         diagrams: envelope.diagrams.length > 0 ? envelope.diagrams : null,
         status: 'complete',
       })
+      // Flip the create→resume flag so the next spawn (whether after process
+      // death, app restart, or simply a fresh send after idle-eviction) uses
+      // `--resume <uuid>` to pick up the server-side conversation.
+      if (provider === 'claude' && !chat.sessionStarted) this.chats.markSessionStarted(chat.id)
       this.chats.touchChat(chat.id)
       if (!assistantMessage) throw new Error('Assistant message vanished mid-send')
       return { userMessage, assistantMessage }
