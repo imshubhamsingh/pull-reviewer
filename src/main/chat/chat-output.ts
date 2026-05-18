@@ -23,11 +23,54 @@ export type ChatRef = z.infer<typeof CodeRefSchema>
  * Same tolerance shape as TourParser: tolerate the claude `{result: "..."}`
  * envelope, ```json fences, and (per the prompt) a plain-text plan narration
  * before the JSON object.
+ *
+ * Defensive against LLM JSON mistakes:
+ *  - Trailing commas before `}` / `]` get stripped automatically.
+ *  - If JSON parse still fails (or the envelope shape doesn't validate), we
+ *    fall back to showing the raw model output as markdown with no
+ *    references — better to surface the answer than throw a parse error.
  */
 export function parseChatEnvelope(raw: string): ChatEnvelope {
-  const text = extractJsonObject(stripFences(unwrapEnvelope(raw.trim())))
-  const parsed: unknown = JSON.parse(text)
-  return ChatEnvelopeSchema.parse(parsed)
+  const unwrapped = stripFences(unwrapEnvelope(raw.trim()))
+  const text = extractJsonObject(unwrapped)
+  const parsed = tryParse(text)
+  if (parsed == null) return fallbackEnvelope(unwrapped, raw)
+  const result = ChatEnvelopeSchema.safeParse(parsed)
+  if (result.success) return result.data
+  const salvaged = salvageMarkdown(parsed)
+  return { markdown: salvaged ?? (unwrapped || raw.trim()), references: [] }
+}
+
+/** Try plain parse; if that fails, retry after stripping trailing commas. */
+function tryParse(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    /* fall through */
+  }
+  try {
+    return JSON.parse(stripTrailingCommas(text))
+  } catch {
+    return null
+  }
+}
+
+function stripTrailingCommas(text: string): string {
+  return text.replace(/,(\s*[}\]])/g, '$1')
+}
+
+function fallbackEnvelope(unwrapped: string, raw: string): ChatEnvelope {
+  return { markdown: unwrapped || raw.trim(), references: [] }
+}
+
+/** Pluck a markdown-ish string field from a parsed-but-shape-mismatched JSON object. */
+function salvageMarkdown(parsed: unknown): string | undefined {
+  if (typeof parsed !== 'object' || parsed === null) return undefined
+  for (const key of ['markdown', 'message', 'answer', 'response', 'text']) {
+    const v = (parsed as Record<string, unknown>)[key]
+    if (typeof v === 'string' && v.trim().length > 0) return v
+  }
+  return undefined
 }
 
 function unwrapEnvelope(text: string): string {
