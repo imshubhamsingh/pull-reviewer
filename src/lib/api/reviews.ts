@@ -13,6 +13,9 @@ export const reviews = {
     http.post<ReviewDraft>(`/api/reviews/${repo}/${prNumber}/drafts`, input),
   update: (id: number, body: string) =>
     http.patch<ReviewDraft>(`/api/reviews/drafts/${id}`, { body }),
+  /** Re-anchor a draft to a new line / line range; pass `startLine = null` for a single line. */
+  reanchor: (id: number, line: number, startLine: number | null) =>
+    http.patch<ReviewDraft>(`/api/reviews/drafts/${id}`, { line, startLine }),
   remove: (id: number) => http.del<{ deleted: boolean }>(`/api/reviews/drafts/${id}`),
   submit: (repo: string, prNumber: number, input: SubmitReviewInput) =>
     http.post<SubmittedReview>(`/api/reviews/${repo}/${prNumber}/submit`, input),
