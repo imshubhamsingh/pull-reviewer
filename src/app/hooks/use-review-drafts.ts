@@ -14,6 +14,8 @@ export interface ReviewDrafts {
   byLine: (file: string, line: number) => ReviewDraft[]
   add: (input: CreateDraftInput) => Promise<void>
   update: (id: number, body: string) => Promise<void>
+  /** Re-anchor an existing draft to a new line range. Pass `startLine = null` for a single line. */
+  reanchor: (id: number, line: number, startLine: number | null) => Promise<void>
   remove: (id: number) => Promise<void>
   submit: (input: SubmitReviewInput) => Promise<SubmittedReview>
   refresh: () => Promise<void>
@@ -52,6 +54,10 @@ export function useReviewDrafts(repo: string, prNumber: number): ReviewDrafts {
     },
     update: async (id, body) => {
       const updated = await api.reviews.update(id, body)
+      setDrafts((prev) => prev.map((d) => (d.id === id ? updated : d)))
+    },
+    reanchor: async (id, line, startLine) => {
+      const updated = await api.reviews.reanchor(id, line, startLine)
       setDrafts((prev) => prev.map((d) => (d.id === id ? updated : d)))
     },
     remove: async (id) => {

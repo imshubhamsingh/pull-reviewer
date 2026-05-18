@@ -13,6 +13,12 @@ export interface ReviewDraftRecord {
   startLine: number | null
   side: ReviewSide
   body: string
+  /**
+   * Reason the last submission attempt couldn't post this draft (typically
+   * "Line could not be resolved" from GitHub). Cleared whenever the body or
+   * line range is edited so the user can retry after fixing it.
+   */
+  lastSubmitError: string | null
   createdAt: string
   updatedAt: string
 }
@@ -36,11 +42,13 @@ interface Row {
   start_line: number | null
   side: ReviewSide
   body: string
+  last_submit_error: string | null
   created_at: string
   updated_at: string
 }
 
-const COLUMNS = 'id, repo, pr_number, file, line, start_line, side, body, created_at, updated_at'
+const COLUMNS =
+  'id, repo, pr_number, file, line, start_line, side, body, last_submit_error, created_at, updated_at'
 
 export class ReviewDraftStore extends Service {
   constructor(private readonly db: Db) {
@@ -88,14 +96,52 @@ export class ReviewDraftStore extends Service {
   }
 
   updateBody(id: number, body: string): ReviewDraftRecord | undefined {
+    // Editing the body clears any prior submit error — the comment is fresh
+    // and worth retrying.
     this.db.update(
       /* sql */ `
         UPDATE review_drafts
            SET body = ?,
+               last_submit_error = NULL,
                updated_at = ?
          WHERE id = ?
       `,
       [body, new Date().toISOString(), id],
+    )
+    return this.get(id)
+  }
+
+  /**
+   * Re-anchor a draft to a new line / line range. `startLine` should be null
+   * (or equal to `line`) for single-line drafts. Callers are responsible for
+   * passing a valid range — the store doesn't clamp against file length.
+   * Clears `last_submit_error` since re-anchoring is exactly the fix.
+   */
+  updateRange(id: number, line: number, startLine: number | null): ReviewDraftRecord | undefined {
+    this.db.update(
+      /* sql */ `
+        UPDATE review_drafts
+           SET line = ?,
+               start_line = ?,
+               last_submit_error = NULL,
+               updated_at = ?
+         WHERE id = ?
+      `,
+      [line, startLine, new Date().toISOString(), id],
+    )
+    return this.get(id)
+  }
+
+  /** Mark a draft as having failed its last submission attempt with a reason. */
+  markSubmitError(id: number, reason: string): ReviewDraftRecord | undefined {
+    this.db.update(
+      /* sql */ `
+        UPDATE review_drafts
+           SET last_submit_error = ?,
+               updated_at = ?
+         WHERE id = ?
+      `,
+      [reason, new Date().toISOString(), id],
     )
     return this.get(id)
   }
@@ -140,6 +186,7 @@ function toRecord(row: Row): ReviewDraftRecord {
     startLine: row.start_line,
     side: row.side,
     body: row.body,
+    lastSubmitError: row.last_submit_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

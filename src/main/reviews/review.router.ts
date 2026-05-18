@@ -6,12 +6,17 @@ import type { ReviewService, SubmitInput } from '@/main/reviews/review.service'
 interface DraftBody {
   file: string
   line: number
+  /** First line of the range; null/equal-to-line means single-line. */
+  startLine?: number | null
   side?: ReviewSide
   body: string
 }
 
 interface UpdateBody {
-  body: string
+  body?: string
+  /** Re-anchor target end-line. Pair with `startLine` to set a multi-line range. */
+  line?: number
+  startLine?: number | null
 }
 
 interface SubmitBody {
@@ -54,6 +59,7 @@ export class ReviewRouter extends Service {
         prNumber: parsed.prNumber,
         file: body.file,
         line: body.line,
+        startLine: normaliseStart(body.line, body.startLine),
         side: body.side ?? 'after',
         body: body.body,
       }
@@ -64,8 +70,23 @@ export class ReviewRouter extends Service {
       const id = Number(c.req.param('id'))
       if (!Number.isInteger(id)) return c.json({ error: 'invalid id' }, 400)
       const body = await c.req.json<UpdateBody>().catch((): UpdateBody | null => null)
-      if (!body || !body.body) return c.json({ error: 'body is required' }, 400)
-      const updated = this.reviews.update(id, body.body)
+      if (!body) return c.json({ error: 'request body required' }, 400)
+      const wantsRange = Number.isInteger(body.line)
+      const wantsBody = typeof body.body === 'string' && body.body.length > 0
+      if (!wantsRange && !wantsBody) {
+        return c.json({ error: 'body or line is required' }, 400)
+      }
+      let updated
+      if (wantsRange) {
+        updated = this.reviews.reanchor(
+          id,
+          body.line as number,
+          normaliseStart(body.line as number, body.startLine),
+        )
+      }
+      if (wantsBody) {
+        updated = this.reviews.update(id, body.body as string)
+      }
       if (!updated) return c.json({ error: 'draft not found' }, 404)
       return c.json(updated)
     })
@@ -122,4 +143,15 @@ function parseParams(
   const prNumber = Number(prNumberRaw)
   if (!Number.isInteger(prNumber) || prNumber <= 0) return null
   return { repo: `${repoOwner}/${repoName}`, prNumber }
+}
+
+/**
+ * Normalise the start line on the way in: drop it when collapsed (single-line)
+ * or invalid, otherwise hand back the lower bound. The store always sees a
+ * clean null-or-int and never a "startLine === line" duplicate.
+ */
+function normaliseStart(line: number, startLine: number | null | undefined): number | null {
+  if (startLine == null || !Number.isInteger(startLine)) return null
+  if (startLine === line) return null
+  return Math.min(line, startLine)
 }

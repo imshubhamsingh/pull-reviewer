@@ -440,6 +440,8 @@ export interface ReviewDraft {
   startLine: number | null
   side: ReviewSide
   body: string
+  /** Set when a prior submission attempt couldn't post this draft (e.g. line outside the diff hunks). Cleared on edit / re-anchor. */
+  lastSubmitError: string | null
   createdAt: string
   updatedAt: string
 }
@@ -461,6 +463,8 @@ export interface SubmitReviewInput {
 export interface SubmittedReview {
   id: number
   htmlUrl: string
+  /** Draft ids that couldn't be submitted because their line isn't in the current diff hunks. They remain in the local store. */
+  unresolvableDraftIds: number[]
 }
 
 export interface QaThread {

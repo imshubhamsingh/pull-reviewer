@@ -35,6 +35,10 @@ export class ReviewService extends Service {
     return this.drafts.updateBody(id, body)
   }
 
+  reanchor(id: number, line: number, startLine: number | null): ReviewDraftRecord | undefined {
+    return this.drafts.updateRange(id, line, startLine)
+  }
+
   remove(id: number): boolean {
     return this.drafts.remove(id)
   }
@@ -49,7 +53,16 @@ export class ReviewService extends Service {
       summary: input.summary,
       event: input.event,
     })
-    this.drafts.removeAll(input.repo, input.prNumber)
+    // Only delete drafts that actually made it to GitHub. Unresolvable drafts
+    // stay in the local store, get marked with a persistent `lastSubmitError`
+    // so the UI can flag them across app restarts, and the next edit / range
+    // change clears the flag automatically.
+    const unresolvable = new Set(submitted.unresolvableDraftIds)
+    const errorReason = 'Line could not be resolved in the current diff hunks.'
+    for (const d of pending) {
+      if (unresolvable.has(d.id)) this.drafts.markSubmitError(d.id, errorReason)
+      else this.drafts.remove(d.id)
+    }
     return submitted
   }
 }
