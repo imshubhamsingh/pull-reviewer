@@ -1,9 +1,10 @@
 import { marked } from 'marked'
 import { useMemo, type JSX } from 'react'
 import { CritiqueCallout } from '@/app/components/critique-callout'
+import { PrShapeCallout } from '@/app/components/pr-shape-callout'
 import { QaThreadCard } from '@/app/components/qa-thread-card'
 import { linkify } from '@/app/lib/docs-linkify'
-import type { CodePointer, QaThread, TourChapter, TourStep } from '@/lib/api'
+import type { CodePointer, PrShape, QaThread, TourChapter, TourStep } from '@/lib/api'
 
 interface Props {
   step: TourStep
@@ -12,6 +13,9 @@ interface Props {
   qaThreads: QaThread[]
   /** Every changed file in the tour — used as an additional linkify source so any backticked file basename becomes clickable. */
   tourFilePaths: string[]
+  /** Top-of-tour PR-shape summary. Passed only for the first chapter; absent
+   * elsewhere so it doesn't repeat across the walkthrough. */
+  prShape?: PrShape
   onDeleteQa: (id: number) => Promise<void>
   /** Click on a linkified identifier in the body. Receives the pointer it resolved to. */
   onJumpToRef?: (ref: CodePointer) => void
@@ -28,6 +32,7 @@ export function DocsPane({
   chapter,
   qaThreads,
   tourFilePaths,
+  prShape,
   onDeleteQa,
   onJumpToRef,
 }: Props): JSX.Element {
@@ -55,6 +60,7 @@ export function DocsPane({
         dangerouslySetInnerHTML={{ __html: html }}
       />
       {chapter.critique && <CritiqueCallout critique={chapter.critique} />}
+      {prShape && <PrShapeCallout shape={prShape} className="mt-4" />}
       {qaThreads.length > 0 && (
         <div className="mt-2">
           {qaThreads.map((t) => (

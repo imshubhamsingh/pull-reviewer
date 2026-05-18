@@ -326,9 +326,49 @@ export interface SkipReason {
   reason: string
 }
 
+export type ComplexityKind =
+  | 'cyclomatic'
+  | 'file-length'
+  | 'function-length'
+  | 'nesting'
+  | 'churn'
+  | 'pattern'
+  | 'duplication'
+
+export interface ComplexityFlag {
+  kind: ComplexityKind
+  severity: 'minor' | 'major' | 'blocker'
+  body: string
+  suggestion?: string
+  code?: FindingCode
+}
+
+export interface SplitStack {
+  title: string
+  rationale: string
+  files?: string[]
+}
+
+export interface SplitSuggestion {
+  summary: string
+  stacks: SplitStack[]
+}
+
+export type PrSize = 'small' | 'medium' | 'large' | 'very-large'
+
+export interface PrShape {
+  size: PrSize
+  /** Minutes a lead-engineer-caliber reviewer would spend on a focused first pass. */
+  reviewMinutes: number
+  rationale: string
+  splitSuggestion?: SplitSuggestion
+  complexityFlags: ComplexityFlag[]
+}
+
 export interface Review {
   lensesApplied: Lens[]
   lensesSkipped: SkipReason[]
+  prShape?: PrShape
   findings: Finding[]
 }
 
