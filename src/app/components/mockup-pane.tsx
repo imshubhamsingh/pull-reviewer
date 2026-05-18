@@ -88,7 +88,7 @@ export function MockupPane({ step, scene, onJumpSource }: Props): JSX.Element {
         <CanvasZoomControls canvas={canvas} onFit={fit} containerRef={containerRef} />
       </div>
       <figcaption
-        className="markdown border-border text-text-secondary border-t px-4 py-3 text-xs leading-relaxed"
+        className="markdown border-border text-text-secondary border-t px-4 py-3 text-sm leading-relaxed"
         dangerouslySetInnerHTML={{ __html: captionHtml }}
       />
     </div>

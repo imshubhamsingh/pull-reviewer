@@ -167,7 +167,7 @@ export function MermaidPane({ step }: Props): JSX.Element {
         )}
       </div>
       <figcaption
-        className="markdown border-border text-text-secondary border-t px-4 py-3 text-xs leading-relaxed"
+        className="markdown border-border text-text-secondary border-t px-4 py-3 text-sm leading-relaxed"
         dangerouslySetInnerHTML={{ __html: captionHtml }}
       />
     </div>
