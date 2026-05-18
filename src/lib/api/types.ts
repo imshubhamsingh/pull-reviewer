@@ -477,6 +477,8 @@ export interface QaThread {
   question: string
   answer: string
   model: string | null
+  /** Chapter id the thread was created from; null for ad-hoc threads (no active chapter). */
+  chapterId: string | null
   createdAt: string
 }
 
@@ -487,6 +489,8 @@ export interface AskAiInput {
   endLine: number
   question: string
   model?: string
+  /** Pass the active chapter id so the thread also surfaces in that chapter's docs pane. */
+  chapterId?: string | null
 }
 
 /**

@@ -6,6 +6,13 @@ export interface QaThreads {
   loading: boolean
   error: string | undefined
   byFile: (file: string) => QaThread[]
+  /**
+   * Threads anchored to either the given chapter id OR the given file. Use
+   * this when rendering a chapter's docs pane: threads created from the
+   * chapter's pinned files PLUS threads created on standalone reference files
+   * while the user was on this chapter both surface together.
+   */
+  forChapter: (chapterId: string | undefined, file: string | undefined) => QaThread[]
   ask: (input: AskAiInput) => Promise<QaThread>
   /**
    * Streaming variant — invokes onEvent for each tool_call / partial_text /
@@ -46,6 +53,11 @@ export function useQaThreads(repo: string, prNumber: number): QaThreads {
     loading,
     error,
     byFile: (file) => threads.filter((t) => t.file === file),
+    forChapter: (chapterId, file) =>
+      threads.filter(
+        (t) =>
+          (chapterId != null && t.chapterId === chapterId) || (file != null && t.file === file),
+      ),
     ask: async (input) => {
       const created = await api.qa.ask(repo, prNumber, input)
       setThreads((prev) => [...prev, created])

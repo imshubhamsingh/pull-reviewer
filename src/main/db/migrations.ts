@@ -13,6 +13,7 @@ import * as m20260516000000ChapterCompletions from '@/main/db/migrations/2026051
 import * as m20260516000001FileReviews from '@/main/db/migrations/20260516000001-file-reviews'
 import * as m20260517000000AiReview from '@/main/db/migrations/20260517000000-ai-review'
 import * as m20260518000000TourJobs from '@/main/db/migrations/20260518000000-tour-jobs'
+import * as m20260519000000QaThreadChapter from '@/main/db/migrations/20260519000000-qa-thread-chapter'
 import * as m20260520000000ReviewDraftSubmitError from '@/main/db/migrations/20260520000000-review-draft-submit-error'
 
 interface Migration {
@@ -38,6 +39,7 @@ const MIGRATIONS: Migration[] = [
   m20260516000001FileReviews,
   m20260517000000AiReview,
   m20260518000000TourJobs,
+  m20260519000000QaThreadChapter,
   m20260520000000ReviewDraftSubmitError,
 ]
 

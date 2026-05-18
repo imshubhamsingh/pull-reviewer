@@ -20,6 +20,8 @@ export interface ExplainInput {
   question: string
   /** Optional model override; defaults to the catalog's default. */
   model?: string
+  /** Chapter the reviewer was on when the question was asked — surfaces the thread in that chapter's docs pane. */
+  chapterId?: string | null
   signal?: AbortSignal
   /** Live event stream — tool calls, text deltas, final raw — for streaming UIs. */
   onEvent?: (event: CliEvent) => void
@@ -106,6 +108,7 @@ export class ExplainService extends Service {
       question: input.question,
       answer,
       model,
+      chapterId: input.chapterId ?? null,
     })
     return { thread }
   }

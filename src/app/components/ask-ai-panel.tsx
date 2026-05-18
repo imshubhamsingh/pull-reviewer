@@ -1,6 +1,6 @@
-import { marked } from 'marked'
-import { useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
+import { MarkdownView } from '@/app/components/markdown-view'
 import type { AskStreamEvent, QaThread } from '@/lib/api'
 
 export interface AskContext {
@@ -8,6 +8,13 @@ export interface AskContext {
   file: string
   startLine: number
   endLine: number
+}
+
+/** Imperative + reactive state surface for an external "Ask" button. */
+export interface AskActions {
+  submit: () => void
+  canSubmit: boolean
+  busy: boolean
 }
 
 interface Props {
@@ -18,6 +25,8 @@ interface Props {
    */
   onAskStream: (question: string, onEvent: (e: AskStreamEvent) => void) => Promise<QaThread>
   onUseAsComment: (text: string) => void
+  /** Lets a parent (e.g. LineComposer) render its own submit button. */
+  onActionsChange?: (actions: AskActions) => void
 }
 
 function placeholderFor(context: AskContext): string {
@@ -26,7 +35,12 @@ function placeholderFor(context: AskContext): string {
   return lo === hi ? `Ask AI about line ${lo}…` : `Ask AI about lines ${lo}–${hi}…`
 }
 
-export function AskAiPanel({ context, onAskStream, onUseAsComment }: Props): JSX.Element {
+export function AskAiPanel({
+  context,
+  onAskStream,
+  onUseAsComment,
+  onActionsChange,
+}: Props): JSX.Element {
   const [question, setQuestion] = useState('')
   const [busy, setBusy] = useState(false)
   const [events, setEvents] = useState<AskStreamEvent[]>([])
@@ -34,7 +48,7 @@ export function AskAiPanel({ context, onAskStream, onUseAsComment }: Props): JSX
   const [error, setError] = useState<string | undefined>()
   const placeholder = useMemo(() => placeholderFor(context), [context])
 
-  const ask = async () => {
+  const ask = async (): Promise<void> => {
     const trimmed = question.trim()
     if (!trimmed || busy) return
     setBusy(true)
@@ -51,50 +65,44 @@ export function AskAiPanel({ context, onAskStream, onUseAsComment }: Props): JSX
     }
   }
 
-  const answerHtml = useMemo(
-    () => (answer ? (marked.parse(answer, { async: false }) as string) : ''),
-    [answer],
-  )
+  // Surface submit + reactive flags to a parent so it can render its own
+  // primary button (LineComposer relabels the footer's CTA to "Ask").
+  useEffect(() => {
+    onActionsChange?.({
+      submit: () => void ask(),
+      canSubmit: !!question.trim() && !busy,
+      busy,
+    })
+  }, [question, busy, onActionsChange])
 
   return (
-    <div className="border-border bg-bg mb-2 min-w-0 overflow-hidden rounded-md border p-2">
-      <p className="text-text-muted mb-1 text-[10px] tracking-wider uppercase">
-        Ask AI about lines {Math.min(context.startLine, context.endLine)}–
-        {Math.max(context.startLine, context.endLine)}
-      </p>
-      <div className="flex min-w-0 gap-2">
-        <input
-          type="text"
+    <div className="min-w-0">
+      <div className="relative min-w-0">
+        <textarea
           autoFocus
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') void ask()
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void ask()
           }}
-          placeholder={busy ? 'Asking…' : placeholder}
+          placeholder={busy ? 'Asking…' : `${placeholder} (⌘↵ to ask)`}
           disabled={busy}
-          className="border-border bg-surface text-text-primary min-w-0 flex-1 rounded-sm border px-2 py-1 text-xs outline-none disabled:cursor-wait disabled:opacity-60"
+          rows={3}
+          className="bg-bg border-border text-text-primary w-full resize-y rounded-sm border px-2 py-1 pr-7 text-xs leading-relaxed outline-none disabled:cursor-wait disabled:opacity-60"
         />
-        <button
-          type="button"
-          onClick={() => {
-            void ask()
-          }}
-          disabled={!question.trim() || busy}
-          aria-busy={busy}
-          className="bg-interactive-secondary hover:bg-interactive-secondary-hover text-text-primary flex shrink-0 items-center gap-1 rounded-sm px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {busy && <Spinner />}
-          {busy ? 'Asking…' : 'Ask'}
-        </button>
+        {busy && (
+          <span aria-hidden className="text-text-muted pointer-events-none absolute top-2 right-2">
+            <Spinner />
+          </span>
+        )}
       </div>
       {busy && <ActivityLog events={events} />}
       {error && <p className="text-text-danger mt-2 text-xs">{error}</p>}
       {answer && (
         <div className="mt-2 min-w-0">
-          <div
-            className="markdown text-text-secondary min-w-0 text-xs leading-relaxed break-words"
-            dangerouslySetInnerHTML={{ __html: answerHtml }}
+          <MarkdownView
+            body={answer}
+            className="text-text-secondary min-w-0 text-xs leading-relaxed break-words"
           />
           <button
             type="button"

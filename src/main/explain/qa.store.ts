@@ -11,6 +11,8 @@ export interface QaThreadRecord {
   question: string
   answer: string
   model: string | null
+  /** Chapter the user was on when this thread was created — null for pre-migration / ad-hoc threads. */
+  chapterId: string | null
   createdAt: string
 }
 
@@ -23,6 +25,7 @@ export interface QaThreadInput {
   question: string
   answer: string
   model: string | null
+  chapterId: string | null
 }
 
 interface Row {
@@ -35,11 +38,12 @@ interface Row {
   question: string
   answer: string
   model: string | null
+  chapter_id: string | null
   created_at: string
 }
 
 const COLUMNS =
-  'id, repo, pr_number, file, start_line, end_line, question, answer, model, created_at'
+  'id, repo, pr_number, file, start_line, end_line, question, answer, model, chapter_id, created_at'
 
 export class QaThreadStore extends Service {
   constructor(private readonly db: Db) {
@@ -65,9 +69,9 @@ export class QaThreadStore extends Service {
     const result = this.db.insert(
       /* sql */ `
         INSERT INTO qa_threads
-          (repo, pr_number, file, start_line, end_line, question, answer, model, created_at)
+          (repo, pr_number, file, start_line, end_line, question, answer, model, chapter_id, created_at)
         VALUES
-          (@repo, @prNumber, @file, @startLine, @endLine, @question, @answer, @model, @now)
+          (@repo, @prNumber, @file, @startLine, @endLine, @question, @answer, @model, @chapterId, @now)
       `,
       { ...input, now },
     )
@@ -98,6 +102,7 @@ function toRecord(row: Row): QaThreadRecord {
     question: row.question,
     answer: row.answer,
     model: row.model,
+    chapterId: row.chapter_id,
     createdAt: row.created_at,
   }
 }

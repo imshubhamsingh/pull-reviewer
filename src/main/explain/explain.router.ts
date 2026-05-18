@@ -11,6 +11,8 @@ interface AskBody {
   endLine: number
   question: string
   model?: string
+  /** Chapter the user was on when asking — null when asked outside a chapter context. */
+  chapterId?: string | null
 }
 
 export class ExplainRouter extends Service {
@@ -58,6 +60,7 @@ export class ExplainRouter extends Service {
           endLine: body.endLine,
           question: body.question,
           model: body.model,
+          chapterId: body.chapterId ?? null,
           signal: ac.signal,
         })
         return c.json(result.thread)
@@ -102,6 +105,7 @@ export class ExplainRouter extends Service {
             endLine: body.endLine,
             question: body.question,
             model: body.model,
+            chapterId: body.chapterId ?? null,
             signal: ac.signal,
             onEvent: (event: CliEvent) => send(event.type, event),
           })
