@@ -1,33 +1,93 @@
 import { match } from 'ts-pattern'
 import { useState, type JSX, type ReactNode } from 'react'
+import { FileCode, GitCompareArrows } from 'lucide-react'
 import type { Highlighter } from 'shiki'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useGutterSelection } from '@/app/hooks/use-gutter-selection'
 import { useShiki } from '@/app/hooks/use-shiki'
 import { chooseSha, highlightWindow, inferLang } from '@/app/lib/code-utils'
-import type { CodePointer, FileSnapshot, TourResult, TourStep } from '@/lib/api'
+import { cn } from '@/app/lib/utils'
+import { DiffPane } from '@/app/components/diff-pane'
+import type {
+  CodePointer,
+  Finding,
+  FileSnapshot,
+  SymbolLocation,
+  TourResult,
+  TourStep,
+} from '@/lib/api'
 import { CodeHeader } from '@/app/components/code-header'
 import { CodeLines, type ComposerTarget } from '@/app/components/code-lines'
 import { References } from '@/app/components/references'
 import type { QaThreads } from '@/app/hooks/use-qa-threads'
 import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
+import type { ReviewFindingsState } from '@/app/hooks/use-review-findings'
+
+type ViewMode = 'code' | 'diff'
+export type DiffLayout = 'split' | 'unified'
 
 interface Props {
   repo: string
   tour: TourResult
   step: TourStep
+  /** Active chapter id — stamped on any Ask AI thread created from this pane so it later surfaces in the chapter's docs. */
+  chapterId: string | undefined
   drafts: ReviewDrafts
   qa: QaThreads
+  aiFindings: ReviewFindingsState
+  /** When the user clicks a finding in the right-pane, this is set to the finding id so the inline ✨ card auto-opens once CodePane mounts that file. */
+  aiPendingExpand?: string | null
   onJumpToRef: (ref: CodePointer) => void
+  /** PR-wide Code/Diff selection lifted to tour-view so it persists across navigation. */
+  viewMode: ViewMode
+  onViewModeChange: (m: ViewMode) => void
+  diffLayout: DiffLayout
+  onDiffLayoutChange: (l: DiffLayout) => void
 }
 
-export function CodePane({ repo, tour, step, drafts, qa, onJumpToRef }: Props): JSX.Element {
+export function CodePane({
+  repo,
+  tour,
+  step,
+  chapterId,
+  drafts,
+  qa,
+  aiFindings,
+  aiPendingExpand,
+  onJumpToRef,
+  viewMode,
+  onViewModeChange,
+  diffLayout,
+  onDiffLayoutChange,
+}: Props): JSX.Element {
   const code = step.code
   const sha = chooseSha(tour, code?.side)
   const snapshot = useFileSnapshot(repo, sha, code?.file)
   const hl = useShiki()
 
   if (!code) return <EmptyPane>No file pinned for this step.</EmptyPane>
+
+  if (viewMode === 'diff') {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <ViewToggle
+          mode={viewMode}
+          onChange={onViewModeChange}
+          diffLayout={diffLayout}
+          onDiffLayoutChange={onDiffLayoutChange}
+          header={<CodeHeader file={code.file} sha={sha} side={code.side} />}
+        />
+        <DiffPane
+          repo={repo}
+          baseSha={tour.baseRefOid}
+          headSha={tour.headRefOid}
+          file={code.file}
+          prNumber={tour.prNumber}
+          layout={diffLayout}
+        />
+      </div>
+    )
+  }
 
   return match(snapshot)
     .with({ kind: 'idle' }, () => <EmptyPane>No file selected.</EmptyPane>)
@@ -39,13 +99,89 @@ export function CodePane({ repo, tour, step, drafts, qa, onJumpToRef }: Props): 
         code={code}
         sha={sha}
         step={step}
+        chapterId={chapterId}
         hl={hl}
         drafts={drafts}
         qa={qa}
+        aiFindings={aiFindings}
+        aiPendingExpand={aiPendingExpand}
         onJumpToRef={onJumpToRef}
+        mode={viewMode}
+        onModeChange={onViewModeChange}
+        diffLayout={diffLayout}
+        onDiffLayoutChange={onDiffLayoutChange}
       />
     ))
     .exhaustive()
+}
+
+function ViewToggle({
+  mode,
+  onChange,
+  diffLayout,
+  onDiffLayoutChange,
+  header,
+}: {
+  mode: ViewMode
+  onChange: (m: ViewMode) => void
+  diffLayout: DiffLayout
+  onDiffLayoutChange: (l: DiffLayout) => void
+  header: JSX.Element
+}): JSX.Element {
+  return (
+    <div className="border-border bg-surface flex items-center justify-between gap-3 border-b pr-3">
+      <div className="min-w-0 flex-1">{header}</div>
+      {mode === 'diff' && (
+        <div className="border-border flex shrink-0 overflow-hidden rounded-sm border">
+          <ToggleBtn active={diffLayout === 'split'} onClick={() => onDiffLayoutChange('split')}>
+            Split
+          </ToggleBtn>
+          <ToggleBtn
+            active={diffLayout === 'unified'}
+            onClick={() => onDiffLayoutChange('unified')}
+          >
+            Unified
+          </ToggleBtn>
+        </div>
+      )}
+      <div className="border-border flex shrink-0 overflow-hidden rounded-sm border">
+        <ToggleBtn active={mode === 'code'} onClick={() => onChange('code')}>
+          <FileCode size={12} aria-hidden />
+          Code
+        </ToggleBtn>
+        <ToggleBtn active={mode === 'diff'} onClick={() => onChange('diff')}>
+          <GitCompareArrows size={12} aria-hidden />
+          Diff
+        </ToggleBtn>
+      </div>
+    </div>
+  )
+}
+
+function ToggleBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'flex items-center gap-1.5 px-2 py-0.5 text-[10px] tracking-wider uppercase transition-colors',
+        active
+          ? 'bg-surface-hover text-text-primary'
+          : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary',
+      )}
+    >
+      {children}
+    </button>
+  )
 }
 
 interface ReadyPaneProps {
@@ -53,10 +189,17 @@ interface ReadyPaneProps {
   code: CodePointer
   sha: string
   step: TourStep
+  chapterId: string | undefined
   hl: Highlighter | undefined
   drafts: ReviewDrafts
   qa: QaThreads
+  aiFindings: ReviewFindingsState
+  aiPendingExpand?: string | null
   onJumpToRef: (ref: CodePointer) => void
+  mode: ViewMode
+  onModeChange: (m: ViewMode) => void
+  diffLayout: DiffLayout
+  onDiffLayoutChange: (l: DiffLayout) => void
 }
 
 function ReadyPane({
@@ -64,10 +207,17 @@ function ReadyPane({
   code,
   sha,
   step,
+  chapterId,
   hl,
   drafts,
   qa,
+  aiFindings,
+  aiPendingExpand,
   onJumpToRef,
+  mode,
+  onModeChange,
+  diffLayout,
+  onDiffLayoutChange,
 }: ReadyPaneProps): JSX.Element {
   const [composer, setComposer] = useState<ComposerTarget | null>(null)
   // Open the composer only on mouseup commit (after a drag / click finishes) so
@@ -91,10 +241,19 @@ function ReadyPane({
   if (!hl) return <EmptyPane>Loading highlighter…</EmptyPane>
   const { focusLines, scrollTo, range } = highlightWindow(code)
   const reviewSide = code.side === 'before' ? 'before' : 'after'
+  const aiByLine = aiFindings.byLineMap(code.file)
+  const dismissedFile = collectIds(aiByLine, (id) => aiFindings.isDismissed(id))
+  const convertedFile = collectIds(aiByLine, (id) => aiFindings.isConverted(id))
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <CodeHeader file={code.file} sha={sha} side={code.side} />
+      <ViewToggle
+        mode={mode}
+        onChange={onModeChange}
+        diffLayout={diffLayout}
+        onDiffLayoutChange={onDiffLayoutChange}
+        header={<CodeHeader file={code.file} sha={sha} side={code.side} />}
+      />
       <CodeLines
         highlighter={hl}
         content={snap.content}
@@ -107,11 +266,22 @@ function ReadyPane({
         drafts={fileDrafts}
         composer={composer}
         selection={selection}
+        aiFindingsByLine={aiByLine}
+        aiDismissed={dismissedFile}
+        aiConverted={convertedFile}
+        aiPendingExpand={aiPendingExpand}
+        onAiDismiss={aiFindings.dismiss}
+        onAiConvert={(finding) => convertFindingToDraft(finding, drafts, aiFindings, reviewSide)}
+        onAiJumpSymbol={(loc: SymbolLocation) =>
+          onJumpToRef({ file: loc.file, lineStart: loc.line })
+        }
         onCloseComposer={() => {
           setComposer(null)
           selection.clear()
         }}
-        onAskAiStream={(input, onEvent) => qa.askStream(input, { onEvent })}
+        onAskAiStream={(input, onEvent) =>
+          qa.askStream({ ...input, chapterId: chapterId ?? null }, { onEvent })
+        }
         onSaveDraft={async (target, body) => {
           const lo = Math.min(target.startLine, target.endLine)
           const hi = Math.max(target.startLine, target.endLine)
@@ -126,6 +296,7 @@ function ReadyPane({
           selection.clear()
         }}
         onUpdateDraft={drafts.update}
+        onReanchorDraft={drafts.reanchor}
         onDeleteDraft={drafts.remove}
       />
       {step.references?.length ? (
@@ -139,6 +310,52 @@ function ReadyPane({
       ) : null}
     </div>
   )
+}
+
+function collectIds(
+  aiByLine: Map<number, Finding[]>,
+  predicate: (id: string) => boolean,
+): Set<string> {
+  const out = new Set<string>()
+  for (const findings of aiByLine.values()) {
+    for (const f of findings) {
+      if (predicate(f.id)) out.add(f.id)
+    }
+  }
+  return out
+}
+
+/**
+ * Convert an AI finding into a user-authored review draft. The finding
+ * itself stays in `review.findings` (and the inline ✨ remains so the
+ * user can see its provenance) — but a new 💬 draft appears alongside,
+ * pre-populated with body + suggestion + an AI-surfaced footer that the
+ * submit-review modal uses to render the "AI-surfaced" pill.
+ */
+async function convertFindingToDraft(
+  finding: Finding,
+  drafts: ReviewDrafts,
+  aiFindings: ReviewFindingsState,
+  reviewSide: 'before' | 'after',
+): Promise<void> {
+  if (!finding.code?.file || finding.code.lineStart == null) return
+  const lineEnd = finding.code.lineEnd ?? finding.code.lineStart
+  const lineStart = finding.code.lineStart
+  const body = buildDraftBodyFromFinding(finding)
+  await drafts.add({
+    file: finding.code.file,
+    line: Math.max(lineStart, lineEnd),
+    startLine: lineStart === lineEnd ? null : Math.min(lineStart, lineEnd),
+    side: reviewSide,
+    body,
+  })
+  aiFindings.markConverted(finding.id)
+}
+
+function buildDraftBodyFromFinding(finding: Finding): string {
+  const parts = [finding.body]
+  if (finding.suggestion) parts.push(`**Suggestion:** ${finding.suggestion}`)
+  return parts.join('\n\n')
 }
 
 function OmittedPane({

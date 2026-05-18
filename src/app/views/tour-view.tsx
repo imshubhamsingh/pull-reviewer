@@ -7,6 +7,7 @@ import { useFileCoverage, type FileCoverage } from '@/app/hooks/use-file-coverag
 import { useFileReviews } from '@/app/hooks/use-file-reviews'
 import { useQaThreads, type QaThreads } from '@/app/hooks/use-qa-threads'
 import { useReviewDrafts, type ReviewDrafts } from '@/app/hooks/use-review-drafts'
+import { useReviewFindings, type ReviewFindingsState } from '@/app/hooks/use-review-findings'
 import { ChapterStepper } from '@/app/components/chapter-stepper'
 import { ChatPane } from '@/app/components/chat/chat-pane'
 import { RightPaneToggle, type RightPaneMode } from '@/app/components/chat/right-pane-toggle'
@@ -16,8 +17,9 @@ import { DiagramPane } from '@/app/components/diagram-pane'
 import { DocsPane } from '@/app/components/docs-pane'
 import { FileMap } from '@/app/components/file-map'
 import { GeneratingPanel } from '@/app/components/generating-panel'
+import { ReviewPane } from '@/app/components/review-pane'
 import { StaleBanner } from '@/app/components/stale-banner'
-import type { CodeRef, PrChatMessage, TourResult, TourStep } from '@/lib/api'
+import type { CodeRef, Finding, PrChatMessage, TourResult, TourStep } from '@/lib/api'
 
 interface Props {
   repo: string
@@ -71,6 +73,11 @@ type CenterState = { kind: 'step' } | { kind: 'standalone'; ref: CodeRef }
 function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps): JSX.Element {
   const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('map')
   const [centerState, setCenterState] = useState<CenterState>({ kind: 'step' })
+  const [pendingFindingExpand, setPendingFindingExpand] = useState<string | null>(null)
+  // PR-wide Code/Diff selection — persists as the user navigates between
+  // chapters and standalone refs, per the user's "should be global for the PR" ask.
+  const [viewMode, setViewMode] = useState<'code' | 'diff'>('code')
+  const [diffLayout, setDiffLayout] = useState<'split' | 'unified'>('split')
   const nav = useChapterNav(tour.chapters, { onRegenerate, onEscape: onBack })
   const isStale =
     typeof tour.headRefOid === 'string' &&
@@ -79,6 +86,7 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
   const coverage = useFileCoverage(nav.flat)
   const completions = useChapterCompletions(repo, tour.prNumber, tour.headRefOid)
   const fileReviews = useFileReviews(repo, tour.prNumber, tour.headRefOid)
+  const aiFindings = useReviewFindings(tour.review, repo, tour.prNumber, tour.headRefOid)
   // Walking the stepper exits standalone view so the user isn't stranded.
   useEffect(() => {
     setCenterState((current) => (current.kind === 'standalone' ? { kind: 'step' } : current))
@@ -120,6 +128,40 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
   const jumpToChatRef = (ref: CodeRef): void => jumpToRef(ref)
   const closeStandalone = (): void => setCenterState({ kind: 'step' })
   /**
+   * Click on a finding in the right-pane Review tab: jump to its file:line
+   * AND tell CodePane to auto-expand the inline ✨ card for this finding.
+   * The pending id is consumed on the next render of CodeLines and then
+   * harmlessly stays set (re-renders don't re-trigger).
+   */
+  const jumpToFinding = (finding: Finding): void => {
+    const code = finding.code
+    if (!code?.file || code.lineStart == null) return
+    setPendingFindingExpand(finding.id)
+    jumpToRef({ file: code.file, lineStart: code.lineStart, lineEnd: code.lineEnd })
+  }
+  /**
+   * Convert an AI finding (from the right-pane) to a user-authored draft.
+   * Mirrors `convertFindingToDraft` in code-pane.tsx but constructs the
+   * draft directly here so it works regardless of which file is open.
+   */
+  const convertFindingFromReviewPane = async (finding: Finding): Promise<void> => {
+    if (!finding.code?.file || finding.code.lineStart == null) return
+    const lineEnd = finding.code.lineEnd ?? finding.code.lineStart
+    const lineStart = finding.code.lineStart
+    const sideHint = finding.code.side === 'before' ? 'before' : 'after'
+    const body = [finding.body, finding.suggestion ? `**Suggestion:** ${finding.suggestion}` : null]
+      .filter(Boolean)
+      .join('\n\n')
+    await drafts.add({
+      file: finding.code.file,
+      line: Math.max(lineStart, lineEnd),
+      startLine: lineStart === lineEnd ? null : Math.min(lineStart, lineEnd),
+      side: sideHint,
+      body,
+    })
+    aiFindings.markConverted(finding.id)
+  }
+  /**
    * Draft a review comment seeded from a chat answer. The first structured
    * reference's file/lineStart picks the anchor; the message body becomes the
    * draft body with a small "from chat" footer for provenance. Afterwards we
@@ -157,8 +199,13 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
             <DocsPane
               step={nav.current.step}
               chapter={nav.current.chapter}
-              qaThreads={nav.current.step.code ? qa.byFile(nav.current.step.code.file) : []}
+              qaThreads={qa.forChapter(nav.current.chapter.id, nav.current.step.code?.file)}
               tourFilePaths={tour.files.map((f) => f.path)}
+              prShape={
+                nav.current.chapterIdx === 0 && nav.current.stepIdxInChapter === 0
+                  ? (tour.review?.prShape ?? undefined)
+                  : undefined
+              }
               onDeleteQa={qa.remove}
               onJumpToRef={jumpToRef}
             />
@@ -172,14 +219,21 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
               repo={repo}
               headSha={tour.headRefOid}
               baseSha={tour.baseRefOid}
+              prNumber={tour.prNumber}
               ref={centerState.ref}
+              chapterId={nav.current?.chapter.id}
               drafts={drafts}
               qa={qa}
               onClose={closeStandalone}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              diffLayout={diffLayout}
+              onDiffLayoutChange={setDiffLayout}
             />
           ) : nav.current ? (
             renderCenter({
               step: nav.current.step,
+              chapterId: nav.current.chapter.id,
               repo,
               tour,
               drafts,
@@ -190,20 +244,26 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
               currentFile,
               reviewed: fileReviews.reviewed,
               onToggleReviewed: fileReviews.toggle,
+              aiFindings,
+              aiPendingExpand: pendingFindingExpand,
+              viewMode,
+              onViewModeChange: setViewMode,
+              diffLayout,
+              onDiffLayoutChange: setDiffLayout,
             })
           ) : (
             <PlaceholderPane>No step.</PlaceholderPane>
           )}
         </Section>
         <Section
-          title={
-            rightPaneMode === 'map'
-              ? `Map · ${tour.files.length} ${tour.files.length === 1 ? 'file' : 'files'}`
-              : 'Chat'
-          }
+          title={rightPaneTitle(
+            rightPaneMode,
+            tour.files.length,
+            tour.review?.findings.length ?? 0,
+          )}
           headerExtras={<RightPaneToggle mode={rightPaneMode} onChange={setRightPaneMode} />}
         >
-          {rightPaneMode === 'map' ? (
+          {rightPaneMode === 'map' && (
             <FileMap
               files={tour.files}
               currentFile={currentFile}
@@ -212,7 +272,17 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
               onPick={jumpToFile}
               onToggleReviewed={fileReviews.toggle}
             />
-          ) : (
+          )}
+          {rightPaneMode === 'review' && (
+            <ReviewPane
+              review={tour.review}
+              findings={aiFindings}
+              onJumpToFinding={jumpToFinding}
+              onJumpToSymbol={(loc) => jumpToRef({ file: loc.file, lineStart: loc.line })}
+              onConvertToDraft={convertFindingFromReviewPane}
+            />
+          )}
+          {rightPaneMode === 'chat' && (
             <ChatPane
               repo={repo}
               prNumber={tour.prNumber}
@@ -234,15 +304,30 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
         completions={completions}
         fileReviews={fileReviews}
         coverage={coverage}
+        onJumpToFile={(file, line) => jumpToRef({ file, lineStart: line })}
       />
     </div>
   )
 }
 
+function rightPaneTitle(mode: RightPaneMode, fileCount: number, findingCount: number): string {
+  if (mode === 'map') return `Map · ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`
+  if (mode === 'review') {
+    if (findingCount === 0) return 'Review'
+    return `Review · ${findingCount} finding${findingCount === 1 ? '' : 's'}`
+  }
+  return 'Chat'
+}
+
 interface CenterArgs {
   step: TourStep
+  chapterId: string | undefined
   repo: string
   tour: TourResult
+  viewMode: 'code' | 'diff'
+  onViewModeChange: (m: 'code' | 'diff') => void
+  diffLayout: 'split' | 'unified'
+  onDiffLayoutChange: (l: 'split' | 'unified') => void
   drafts: ReviewDrafts
   qa: QaThreads
   jumpToFile: (path: string) => void
@@ -251,11 +336,14 @@ interface CenterArgs {
   currentFile?: string
   reviewed: Set<string>
   onToggleReviewed: (path: string) => void
+  aiFindings: ReviewFindingsState
+  aiPendingExpand: string | null
 }
 
 function renderCenter(args: CenterArgs): JSX.Element {
   const {
     step,
+    chapterId,
     repo,
     tour,
     drafts,
@@ -266,6 +354,12 @@ function renderCenter(args: CenterArgs): JSX.Element {
     currentFile,
     reviewed,
     onToggleReviewed,
+    aiFindings,
+    aiPendingExpand,
+    viewMode,
+    onViewModeChange,
+    diffLayout,
+    onDiffLayoutChange,
   } = args
   return match(step.panel)
     .with('code', () => (
@@ -273,9 +367,16 @@ function renderCenter(args: CenterArgs): JSX.Element {
         repo={repo}
         tour={tour}
         step={step}
+        chapterId={chapterId}
         drafts={drafts}
         qa={qa}
+        aiFindings={aiFindings}
+        aiPendingExpand={aiPendingExpand}
         onJumpToRef={jumpToRef}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
+        diffLayout={diffLayout}
+        onDiffLayoutChange={onDiffLayoutChange}
       />
     ))
     .with('diagram', () => <DiagramPane step={step} onJumpSource={jumpToRef} />)
