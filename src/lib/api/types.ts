@@ -512,13 +512,6 @@ export interface PrChat {
   repo: string
   prNumber: number
   title: string
-  /** Stable UUID for the long-lived claude subprocess's `--session-id` /
-   * `--resume`. Empty string only for legacy chats predating the
-   * 20260522-pr-chat-session migration (back-filled on first spawn). */
-  sessionUuid: string
-  /** Flipped to true after the first successful turn lands. Drives whether
-   * the next spawn uses `--session-id` (create) or `--resume` (recover). */
-  sessionStarted: boolean
   createdAt: string
   updatedAt: string
 }

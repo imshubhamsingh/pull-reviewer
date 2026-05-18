@@ -115,15 +115,7 @@ app
   })
 
 app.on('window-all-closed', () => {
-  services?.chatProcesses.shutdown()
   apiServer?.stop()
   services?.db.close()
   if (process.platform !== 'darwin') app.quit()
-})
-
-// Kill any long-lived chat subprocesses before macOS's "stay in dock" hides
-// them too — Activity Monitor would otherwise show orphan claude processes
-// across app sessions.
-app.on('before-quit', () => {
-  services?.chatProcesses.shutdown()
 })

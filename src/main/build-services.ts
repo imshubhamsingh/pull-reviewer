@@ -1,6 +1,5 @@
 import { AuthService } from '@/main/auth/auth.service'
 import { ChatPromptBuilder } from '@/main/chat/chat-prompt.builder'
-import { ChatProcessManager } from '@/main/chat/chat-process.manager'
 import { ChatRouter } from '@/main/chat/chat.router'
 import { ChatService } from '@/main/chat/chat.service'
 import { PrChatStore } from '@/main/chat/chat.store'
@@ -67,7 +66,6 @@ export interface Services {
   hunks: HunksService
   explain: ExplainService
   chats: ChatService
-  chatProcesses: ChatProcessManager
   settings: SettingsStore
   /** Wired from main.ts after the BrowserWindow is created — used by the tour-job notification handler. */
   setMainWindow: (w: BrowserWindow) => void
@@ -136,7 +134,6 @@ export function buildServices(): Services {
   const settings = new SettingsStore(db.query)
   const chatStore = new PrChatStore(db.query)
   const chatPromptBuilder = new ChatPromptBuilder()
-  const chatProcesses = new ChatProcessManager()
   const chats = new ChatService(
     chatStore,
     settings,
@@ -146,7 +143,6 @@ export function buildServices(): Services {
     cli,
     models,
     chatPromptBuilder,
-    chatProcesses,
   )
 
   const chapterCompletionStore = new ChapterCompletionStore(db.query)
@@ -184,7 +180,6 @@ export function buildServices(): Services {
     hunks,
     explain,
     chats,
-    chatProcesses,
     settings,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),

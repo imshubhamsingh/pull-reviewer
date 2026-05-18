@@ -61,8 +61,6 @@ export function ChatPane({
   return (
     <div className="flex h-full flex-col">
       <ChatHeader
-        repo={repo}
-        prNumber={prNumber}
         chats={chat.chats}
         activeChatId={chat.activeChatId}
         onSelect={chat.selectChat}

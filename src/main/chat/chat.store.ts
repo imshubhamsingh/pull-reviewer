@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type { Db } from '@/main/db/db'
 import { Service } from '@/main/service'
 import type { Diagram } from '@/main/tour/tour-schema'
@@ -17,12 +16,6 @@ export interface PrChatRecord {
   repo: string
   prNumber: number
   title: string
-  /** Stable UUID for the long-lived claude `--session-id` / `--resume` session.
-   * Generated on chat creation; lives for the chat's lifetime. */
-  sessionUuid: string
-  /** False until the first successful turn lands. Drives the spawn-flag
-   * choice in `ChatProcessManager`: `--session-id` (create) vs `--resume`. */
-  sessionStarted: boolean
   createdAt: string
   updatedAt: string
 }
@@ -62,8 +55,6 @@ interface ChatRow {
   repo: string
   pr_number: number
   title: string
-  session_uuid: string | null
-  session_started: number
   created_at: string
   updated_at: string
 }
@@ -80,8 +71,7 @@ interface MessageRow {
   created_at: string
 }
 
-const CHAT_COLUMNS =
-  'id, repo, pr_number, title, session_uuid, session_started, created_at, updated_at'
+const CHAT_COLUMNS = 'id, repo, pr_number, title, created_at, updated_at'
 const MESSAGE_COLUMNS =
   'id, chat_id, role, body, references_json, diagrams_json, status, model, created_at'
 
@@ -114,44 +104,15 @@ export class PrChatStore extends Service {
 
   createChat(repo: string, prNumber: number, title: string): PrChatRecord {
     const now = new Date().toISOString()
-    const sessionUuid = randomUUID()
     const result = this.db.insert(
       /* sql */ `
-        INSERT INTO pr_chats (repo, pr_number, title, session_uuid, session_started, created_at, updated_at)
-        VALUES (@repo, @prNumber, @title, @sessionUuid, 0, @now, @now)
+        INSERT INTO pr_chats (repo, pr_number, title, created_at, updated_at)
+        VALUES (@repo, @prNumber, @title, @now, @now)
       `,
-      { repo, prNumber, title, sessionUuid, now },
+      { repo, prNumber, title, now },
     )
     const id = Number(result.lastInsertRowid)
-    return {
-      id,
-      repo,
-      prNumber,
-      title,
-      sessionUuid,
-      sessionStarted: false,
-      createdAt: now,
-      updatedAt: now,
-    }
-  }
-
-  /** Set after the very first turn lands. Subsequent spawns use `--resume`. */
-  markSessionStarted(id: number): void {
-    this.db.update(/* sql */ `UPDATE pr_chats SET session_started = 1 WHERE id = ?`, [id])
-  }
-
-  /** Back-fill the session uuid for chats created before the
-   * `20260522-pr-chat-session` migration. Called by ChatService on first
-   * spawn when it discovers a null uuid. */
-  ensureSessionUuid(id: number): string {
-    const row = this.db.selectOne<{ session_uuid: string | null }>(
-      /* sql */ `SELECT session_uuid FROM pr_chats WHERE id = ?`,
-      [id],
-    )
-    if (row?.session_uuid) return row.session_uuid
-    const uuid = randomUUID()
-    this.db.update(/* sql */ `UPDATE pr_chats SET session_uuid = ? WHERE id = ?`, [uuid, id])
-    return uuid
+    return { id, repo, prNumber, title, createdAt: now, updatedAt: now }
   }
 
   renameChat(id: number, title: string): PrChatRecord | undefined {
@@ -281,8 +242,6 @@ function toChatRecord(row: ChatRow): PrChatRecord {
     repo: row.repo,
     prNumber: row.pr_number,
     title: row.title,
-    sessionUuid: row.session_uuid ?? '',
-    sessionStarted: row.session_started === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

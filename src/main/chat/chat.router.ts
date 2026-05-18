@@ -57,16 +57,6 @@ export class ChatRouter extends Service {
       return c.json(this.chats.listMessages(chatId))
     })
 
-    // GET /:owner/:name/:pr/:chatId/pid → OS pid of the long-lived claude
-    // subprocess for this chat, or null when no process is attached (chat
-    // hasn't been used yet, child died awaiting lazy respawn, or the
-    // provider isn't claude). Polled by the chat header.
-    app.get('/:repoOwner/:repoName/:prNumber/:chatId/pid', (c) => {
-      const chatId = numericParam(c.req.param('chatId'))
-      if (chatId == null) return c.json({ error: 'invalid chat id' }, 400)
-      return c.json({ pid: this.chats.getPid(chatId) })
-    })
-
     // POST /:owner/:name/:pr/:chatId/send → blocking send; returns the final assistant message.
     app.post('/:repoOwner/:repoName/:prNumber/:chatId/send', async (c) => {
       const chatId = numericParam(c.req.param('chatId'))

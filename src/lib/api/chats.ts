@@ -33,13 +33,6 @@ export const chats = {
   listMessages: (repo: string, prNumber: number, chatId: number) =>
     http.get<PrChatMessage[]>(`/api/chats/${repo}/${prNumber}/${chatId}/messages`),
 
-  /** OS pid of the long-lived claude subprocess handling this chat, or null
-   * when no process is attached (chat hasn't been used, the child died and
-   * is awaiting lazy respawn, or the provider isn't claude). Polled by the
-   * chat header so the user can see which process they're talking to. */
-  getPid: (repo: string, prNumber: number, chatId: number) =>
-    http.get<{ pid: number | null }>(`/api/chats/${repo}/${prNumber}/${chatId}/pid`),
-
   /** Blocking send — returns both the persisted user turn and assistant reply. */
   send: (repo: string, prNumber: number, chatId: number, body: SendChatBody) =>
     http.post<{ userMessage: PrChatMessage; assistantMessage: PrChatMessage }>(

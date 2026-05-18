@@ -26,11 +26,6 @@ export class CliStreamParser {
   private accumulatedText = ''
   private resultMeta: CliResultMeta = {}
 
-  /** Fires once per `{type:'result'}` event the parser sees — used by the
-   * persistent chat-process manager to detect turn-end without scanning the
-   * stream itself. Always undefined for the one-shot tour-gen path. */
-  onResult: ((raw: string, meta: CliResultMeta) => void) | undefined
-
   feed(chunk: string, emit: (e: CliEvent) => void): void {
     this.lineBuffer += chunk
     const lines = this.lineBuffer.split('\n')
@@ -89,7 +84,6 @@ export class CliStreamParser {
     if (typeof event.total_cost_usd === 'number') this.resultMeta.costUsd = event.total_cost_usd
     if (typeof event.duration_ms === 'number') this.resultMeta.durationMs = event.duration_ms
     if (isRecord(event.usage)) this.resultMeta.usage = readUsage(event.usage)
-    this.onResult?.(this.accumulatedText, this.resultMeta)
   }
 
   private handleAssistant(event: Record<string, unknown>, emit: (e: CliEvent) => void): void {
