@@ -522,6 +522,10 @@ export interface PrChatMessage {
   role: ChatMessageRole
   body: string
   references: CodeRef[] | null
+  /** Optional structured diagrams (mockup / mermaid / state) the assistant emits
+   * alongside the markdown body. Rendered inline below the bubble with a
+   * click-to-expand modal for full-screen viewing. */
+  diagrams: Diagram[] | null
   status: ChatMessageStatus
   model: string | null
   createdAt: string

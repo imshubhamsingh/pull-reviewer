@@ -3,6 +3,7 @@ import { marked } from 'marked'
 import { useMemo, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import { RefChips } from '@/app/components/chat/ref-chips'
+import { ChatDiagram } from '@/app/components/chat/chat-diagram'
 import { cn } from '@/app/lib/utils'
 import type { CodeRef, PrChatMessage } from '@/lib/api'
 
@@ -28,6 +29,8 @@ export function MessageBubble({
   const isUser = message.role === 'user'
   const refs =
     !isUser && message.references && message.references.length > 0 ? message.references : null
+  const diagrams =
+    !isUser && message.diagrams && message.diagrams.length > 0 ? message.diagrams : null
   const canUseAsComment =
     !isUser && refs != null && message.status === 'complete' && onUseAsComment != null
   return (
@@ -35,6 +38,16 @@ export function MessageBubble({
       <div className={cn('group flex min-w-0 max-w-[90%] flex-col gap-1.5', isUser && 'order-2')}>
         <Header message={message} onDelete={onDelete} />
         <Body message={message} />
+        {diagrams &&
+          diagrams.map((d, i) => (
+            <ChatDiagram
+              key={i}
+              diagram={d}
+              index={i}
+              messageId={message.id}
+              onJumpRef={onJumpRef}
+            />
+          ))}
         {refs && onJumpRef && <RefChips refs={refs} onClick={onJumpRef} />}
         {canUseAsComment && (
           <button

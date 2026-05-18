@@ -1,5 +1,6 @@
 import type { Db } from '@/main/db/db'
 import { Service } from '@/main/service'
+import type { Diagram } from '@/main/tour/tour-schema'
 
 export interface CodeRef {
   file: string
@@ -25,6 +26,7 @@ export interface PrChatMessageRecord {
   role: ChatMessageRole
   body: string
   references: CodeRef[] | null
+  diagrams: Diagram[] | null
   status: ChatMessageStatus
   model: string | null
   createdAt: string
@@ -35,6 +37,7 @@ export interface AppendMessageInput {
   role: ChatMessageRole
   body: string
   references?: CodeRef[] | null
+  diagrams?: Diagram[] | null
   status?: ChatMessageStatus
   model?: string | null
 }
@@ -42,6 +45,7 @@ export interface AppendMessageInput {
 export interface UpdateMessageInput {
   body?: string
   references?: CodeRef[] | null
+  diagrams?: Diagram[] | null
   status?: ChatMessageStatus
   model?: string | null
 }
@@ -61,13 +65,15 @@ interface MessageRow {
   role: ChatMessageRole
   body: string
   references_json: string | null
+  diagrams_json: string | null
   status: ChatMessageStatus
   model: string | null
   created_at: string
 }
 
 const CHAT_COLUMNS = 'id, repo, pr_number, title, created_at, updated_at'
-const MESSAGE_COLUMNS = 'id, chat_id, role, body, references_json, status, model, created_at'
+const MESSAGE_COLUMNS =
+  'id, chat_id, role, body, references_json, diagrams_json, status, model, created_at'
 
 export class PrChatStore extends Service {
   constructor(private readonly db: Db) {
@@ -145,18 +151,20 @@ export class PrChatStore extends Service {
   appendMessage(input: AppendMessageInput): PrChatMessageRecord {
     const now = new Date().toISOString()
     const refs = input.references ?? null
+    const diagrams = input.diagrams ?? null
     const result = this.db.insert(
       /* sql */ `
         INSERT INTO pr_chat_messages
-          (chat_id, role, body, references_json, status, model, created_at)
+          (chat_id, role, body, references_json, diagrams_json, status, model, created_at)
         VALUES
-          (@chatId, @role, @body, @referencesJson, @status, @model, @now)
+          (@chatId, @role, @body, @referencesJson, @diagramsJson, @status, @model, @now)
       `,
       {
         chatId: input.chatId,
         role: input.role,
         body: input.body,
         referencesJson: refs ? JSON.stringify(refs) : null,
+        diagramsJson: diagrams ? JSON.stringify(diagrams) : null,
         status: input.status ?? 'complete',
         model: input.model ?? null,
         now,
@@ -168,6 +176,7 @@ export class PrChatStore extends Service {
       role: input.role,
       body: input.body,
       references: refs,
+      diagrams,
       status: input.status ?? 'complete',
       model: input.model ?? null,
       createdAt: now,
@@ -184,6 +193,10 @@ export class PrChatStore extends Service {
     if (fields.references !== undefined) {
       sets.push('references_json = @referencesJson')
       params.referencesJson = fields.references ? JSON.stringify(fields.references) : null
+    }
+    if (fields.diagrams !== undefined) {
+      sets.push('diagrams_json = @diagramsJson')
+      params.diagramsJson = fields.diagrams ? JSON.stringify(fields.diagrams) : null
     }
     if (fields.status !== undefined) {
       sets.push('status = @status')
@@ -241,9 +254,26 @@ function toMessageRecord(row: MessageRow): PrChatMessageRecord {
     role: row.role,
     body: row.body,
     references: parseRefs(row.references_json),
+    diagrams: parseDiagrams(row.diagrams_json),
     status: row.status,
     model: row.model,
     createdAt: row.created_at,
+  }
+}
+
+function parseDiagrams(json: string | null): Diagram[] | null {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!Array.isArray(parsed)) return null
+    // Renderer-side defensive: trust the shape since we wrote it ourselves,
+    // but drop entries missing the `kind` discriminator.
+    return parsed.filter(
+      (d): d is Diagram =>
+        typeof d === 'object' && d !== null && typeof (d as { kind?: unknown }).kind === 'string',
+    )
+  } catch {
+    return null
   }
 }
 

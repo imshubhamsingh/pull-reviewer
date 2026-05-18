@@ -51,7 +51,7 @@ const CodePointerSchema = z.object({
 // `state` carries an XState-shaped machine config rendered as a labeled state
 // graph. Existing persisted tours parse cleanly under the union without
 // migration — added variants are purely additive.
-const DiagramSchema = z.discriminatedUnion('kind', [
+export const DiagramSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('sequence'), mermaid: z.string().min(1).max(20_000) }),
   z.object({ kind: z.literal('flowchart'), mermaid: z.string().min(1).max(20_000) }),
   z.object({ kind: z.literal('er'), mermaid: z.string().min(1).max(20_000) }),

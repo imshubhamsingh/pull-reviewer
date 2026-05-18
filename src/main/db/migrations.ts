@@ -15,6 +15,7 @@ import * as m20260517000000AiReview from '@/main/db/migrations/20260517000000-ai
 import * as m20260518000000TourJobs from '@/main/db/migrations/20260518000000-tour-jobs'
 import * as m20260519000000QaThreadChapter from '@/main/db/migrations/20260519000000-qa-thread-chapter'
 import * as m20260520000000ReviewDraftSubmitError from '@/main/db/migrations/20260520000000-review-draft-submit-error'
+import * as m20260521000000PrChatDiagrams from '@/main/db/migrations/20260521000000-pr-chat-diagrams'
 
 interface Migration {
   id: string
@@ -41,6 +42,7 @@ const MIGRATIONS: Migration[] = [
   m20260518000000TourJobs,
   m20260519000000QaThreadChapter,
   m20260520000000ReviewDraftSubmitError,
+  m20260521000000PrChatDiagrams,
 ]
 
 export function applyMigrations(db: Db, logger: Logger): void {

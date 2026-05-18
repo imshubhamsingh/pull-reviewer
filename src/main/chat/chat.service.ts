@@ -142,6 +142,7 @@ export class ChatService extends Service {
       const assistantMessage = this.chats.updateMessage(placeholder.id, {
         body: envelope.markdown,
         references: envelope.references.length > 0 ? envelope.references : null,
+        diagrams: envelope.diagrams.length > 0 ? envelope.diagrams : null,
         status: 'complete',
       })
       this.chats.touchChat(chat.id)

@@ -1,9 +1,11 @@
 import { z } from 'zod'
+import { DiagramSchema } from '@/main/tour/tour-schema'
 
 /**
- * What the chat assistant returns each turn — a markdown answer plus an
- * optional list of structured code pointers the UI renders as click-to-jump
- * chips below the message bubble.
+ * What the chat assistant returns each turn — a markdown answer, optional
+ * code references the UI renders as click-to-jump chips, and optional
+ * structured diagrams (mockup / mermaid / state machine) rendered inline
+ * below the message bubble with a click-to-expand modal.
  */
 const CodeRefSchema = z.object({
   file: z.string().min(1),
@@ -14,6 +16,7 @@ const CodeRefSchema = z.object({
 export const ChatEnvelopeSchema = z.object({
   markdown: z.string().min(1),
   references: z.array(CodeRefSchema).max(8).default([]),
+  diagrams: z.array(DiagramSchema).max(4).default([]),
 })
 
 export type ChatEnvelope = z.infer<typeof ChatEnvelopeSchema>
@@ -41,6 +44,7 @@ export function parseChatEnvelope(raw: string): ChatEnvelope {
   return {
     markdown: stripEnvelopeDump(salvaged ?? (unwrapped || raw.trim())),
     references: [],
+    diagrams: [],
   }
 }
 
@@ -63,7 +67,7 @@ function stripTrailingCommas(text: string): string {
 }
 
 function fallbackEnvelope(unwrapped: string, raw: string): ChatEnvelope {
-  return { markdown: stripEnvelopeDump(unwrapped || raw.trim()), references: [] }
+  return { markdown: stripEnvelopeDump(unwrapped || raw.trim()), references: [], diagrams: [] }
 }
 
 /**
