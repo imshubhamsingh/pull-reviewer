@@ -1,6 +1,15 @@
 import { http } from '@/lib/api/base'
 import type { ChapterCompletion, FileReview } from '@/lib/api/types'
 
+export interface AiFindingDismissal {
+  id: number
+  repo: string
+  prNumber: number
+  headRefOid: string
+  findingId: string
+  dismissedAt: string
+}
+
 /**
  * Two namespaces:
  *  - chapters: per-chapter completion flags
@@ -38,6 +47,20 @@ export const reviewProgress = {
     unmark: (repo: string, prNumber: number, headSha: string, filePath: string) =>
       http.del<{ deleted: boolean }>(
         `/api/review-progress/${repo}/${prNumber}/${encodeURIComponent(headSha)}/files/${encodeURIComponent(filePath)}`,
+      ),
+  },
+  aiDismissals: {
+    list: (repo: string, prNumber: number, headSha: string) =>
+      http.get<AiFindingDismissal[]>(
+        `/api/review-progress/${repo}/${prNumber}/${encodeURIComponent(headSha)}/ai-dismissals`,
+      ),
+    add: (repo: string, prNumber: number, headSha: string, findingId: string) =>
+      http.post<AiFindingDismissal>(
+        `/api/review-progress/${repo}/${prNumber}/${encodeURIComponent(headSha)}/ai-dismissals/${encodeURIComponent(findingId)}`,
+      ),
+    remove: (repo: string, prNumber: number, headSha: string, findingId: string) =>
+      http.del<{ deleted: boolean }>(
+        `/api/review-progress/${repo}/${prNumber}/${encodeURIComponent(headSha)}/ai-dismissals/${encodeURIComponent(findingId)}`,
       ),
   },
 }

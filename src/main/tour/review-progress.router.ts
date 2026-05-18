@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { AiFindingDismissalsStore } from '@/main/tour/ai-finding-dismissals.store'
 import type { ChapterCompletionService } from '@/main/tour/chapter-completion.service'
 import type { FileReviewService } from '@/main/tour/file-review.service'
 import { Service } from '@/main/service'
@@ -19,6 +20,7 @@ export class ReviewProgressRouter extends Service {
   constructor(
     private readonly chapters: ChapterCompletionService,
     private readonly files: FileReviewService,
+    private readonly aiDismissals: AiFindingDismissalsStore,
   ) {
     super()
   }
@@ -110,6 +112,51 @@ export class ReviewProgressRouter extends Service {
       if (!ctx) return c.json({ error: 'invalid scope' }, 400)
       const filePath = decodeURIComponent(c.req.param('filePath'))
       const deleted = this.files.unmark(ctx.repo, ctx.prNumber, ctx.headSha, filePath)
+      return c.json({ deleted })
+    })
+
+    // -------- AI finding dismissals ---------
+
+    app.get('/:repoOwner/:repoName/:prNumber/:headSha/ai-dismissals', (c) => {
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
+      if (!ctx) return c.json({ error: 'invalid scope' }, 400)
+      return c.json(this.aiDismissals.list(ctx.repo, ctx.prNumber, ctx.headSha))
+    })
+
+    app.post('/:repoOwner/:repoName/:prNumber/:headSha/ai-dismissals/:findingId', (c) => {
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
+      if (!ctx) return c.json({ error: 'invalid scope' }, 400)
+      const findingId = decodeURIComponent(c.req.param('findingId'))
+      return c.json(
+        this.aiDismissals.add({
+          repo: ctx.repo,
+          prNumber: ctx.prNumber,
+          headRefOid: ctx.headSha,
+          findingId,
+        }),
+      )
+    })
+
+    app.delete('/:repoOwner/:repoName/:prNumber/:headSha/ai-dismissals/:findingId', (c) => {
+      const ctx = parseScope(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+        c.req.param('headSha'),
+      )
+      if (!ctx) return c.json({ error: 'invalid scope' }, 400)
+      const findingId = decodeURIComponent(c.req.param('findingId'))
+      const deleted = this.aiDismissals.remove(ctx.repo, ctx.prNumber, ctx.headSha, findingId)
       return c.json({ deleted })
     })
 

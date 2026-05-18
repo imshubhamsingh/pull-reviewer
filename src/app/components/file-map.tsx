@@ -1,6 +1,7 @@
 import { CheckSquare, Square } from 'lucide-react'
 import { match } from 'ts-pattern'
-import { useEffect, useRef, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { FileSearch, fuzzyFilterFiles } from '@/app/components/file-search'
 import { cn } from '@/app/lib/utils'
 import type { FileCoverage, FileCoverageKind } from '@/app/hooks/use-file-coverage'
 import type { PrFile } from '@/lib/api'
@@ -24,11 +25,14 @@ export function FileMap({
 }: Props): JSX.Element {
   const listRef = useRef<HTMLUListElement>(null)
   const activeRowRef = useRef<HTMLLIElement>(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!currentFile || !activeRowRef.current || !listRef.current) return
     activeRowRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [currentFile])
+
+  const filtered = useMemo(() => fuzzyFilterFiles(files, query), [files, query])
 
   if (files.length === 0) {
     return (
@@ -37,26 +41,63 @@ export function FileMap({
       </div>
     )
   }
+  const reviewedCount = files.reduce((n, f) => (reviewed.has(f.path) ? n + 1 : n), 0)
   return (
-    <ul ref={listRef} className="h-full overflow-y-auto py-1">
-      {files.map((f) => {
-        const active = f.path === currentFile
-        return (
-          <li key={f.path} ref={active ? activeRowRef : undefined}>
-            <FileRow
-              file={f}
-              active={active}
-              kind={coverage.kind(f.path)}
-              chapter={coverage.firstChapter(f.path)}
-              chapterIdx={coverage.firstChapterIdx(f.path)}
-              reviewed={reviewed.has(f.path)}
-              onPick={onPick}
-              onToggleReviewed={onToggleReviewed}
-            />
-          </li>
-        )
-      })}
-    </ul>
+    <div className="flex h-full flex-col">
+      <FileProgress done={reviewedCount} total={files.length} />
+      <FileSearch query={query} onChange={setQuery} matchCount={filtered.length} />
+      {filtered.length === 0 ? (
+        <p className="text-text-muted flex flex-1 items-center justify-center p-4 text-center text-xs">
+          No files match "{query}".
+        </p>
+      ) : (
+        <ul ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
+          {filtered.map((f) => {
+            const active = f.path === currentFile
+            return (
+              <li key={f.path} ref={active ? activeRowRef : undefined}>
+                <FileRow
+                  file={f}
+                  active={active}
+                  kind={coverage.kind(f.path)}
+                  chapter={coverage.firstChapter(f.path)}
+                  chapterIdx={coverage.firstChapterIdx(f.path)}
+                  reviewed={reviewed.has(f.path)}
+                  onPick={onPick}
+                  onToggleReviewed={onToggleReviewed}
+                />
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function FileProgress({ done, total }: { done: number; total: number }): JSX.Element {
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100)
+  return (
+    <div className="border-border bg-surface shrink-0 border-b px-3 py-2">
+      <div className="text-text-muted mb-1 flex items-baseline justify-between text-[10px] tracking-wider uppercase">
+        <span>Files reviewed</span>
+        <span className="tabular-nums">
+          {done}/{total} · {pct}%
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="bg-bg h-1 w-full overflow-hidden rounded-sm"
+      >
+        <div
+          className="bg-interactive-primary h-full transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
   )
 }
 
