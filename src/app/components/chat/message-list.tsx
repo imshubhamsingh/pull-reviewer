@@ -47,7 +47,7 @@ export function MessageList({
         ))}
       </div>
       {streaming && (tail.length > 0 || thinking) && (
-        <div className="border-border text-text-muted mx-3 mb-3 mt-1 rounded-md border border-dashed px-3 py-2 font-mono text-[11px]">
+        <div className="border-border text-text-muted mx-3 mb-3 mt-1 rounded-md border border-dashed px-3 py-2 font-mono text-[12px]">
           {tail.length > 0 && (
             <ul className="space-y-0.5">
               {tail.map((line, i) => (

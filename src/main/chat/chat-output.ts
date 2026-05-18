@@ -36,9 +36,12 @@ export function parseChatEnvelope(raw: string): ChatEnvelope {
   const parsed = tryParse(text)
   if (parsed == null) return fallbackEnvelope(unwrapped, raw)
   const result = ChatEnvelopeSchema.safeParse(parsed)
-  if (result.success) return result.data
+  if (result.success) return { ...result.data, markdown: stripEnvelopeDump(result.data.markdown) }
   const salvaged = salvageMarkdown(parsed)
-  return { markdown: salvaged ?? (unwrapped || raw.trim()), references: [] }
+  return {
+    markdown: stripEnvelopeDump(salvaged ?? (unwrapped || raw.trim())),
+    references: [],
+  }
 }
 
 /** Try plain parse; if that fails, retry after stripping trailing commas. */
@@ -60,7 +63,24 @@ function stripTrailingCommas(text: string): string {
 }
 
 function fallbackEnvelope(unwrapped: string, raw: string): ChatEnvelope {
-  return { markdown: unwrapped || raw.trim(), references: [] }
+  return { markdown: stripEnvelopeDump(unwrapped || raw.trim()), references: [] }
+}
+
+/**
+ * Trim trailing `{"markdown": "..."}` envelope chunks that the model
+ * sometimes appends after its narration (especially when the JSON gets
+ * truncated mid-stream and the parser falls back to raw text). Leaving them
+ * in produces a visible JSON dump with literal `\n` escapes below the
+ * properly-rendered markdown — see screenshot in the 2026-05-18 session.
+ *
+ * Heuristic: find any `{"markdown":` (or whitespace + that) and cut everything
+ * from there onwards. Safe for legitimate code blocks because LLM markdown
+ * uses backticks for inline JSON, never bare braces at the start of a line.
+ */
+function stripEnvelopeDump(text: string): string {
+  const match = text.match(/\s*\{\s*"markdown"\s*:/)
+  if (!match || match.index == null) return text
+  return text.slice(0, match.index).trimEnd()
 }
 
 /** Pluck a markdown-ish string field from a parsed-but-shape-mismatched JSON object. */

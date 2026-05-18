@@ -42,7 +42,7 @@ export function MessageBubble({
             onClick={() => {
               void onUseAsComment(message)
             }}
-            className="text-text-muted hover:text-text-primary inline-flex items-center gap-1 self-start text-[11px] transition-colors"
+            className="text-text-muted hover:text-text-primary inline-flex items-center gap-1 self-start text-[12px] transition-colors"
             title="Draft a review comment at the first reference"
           >
             <MessageSquareQuote size={12} aria-hidden />
@@ -63,7 +63,7 @@ function Header({
 }): JSX.Element {
   const tone = message.role === 'user' ? 'You' : 'Assistant'
   return (
-    <div className="text-text-muted mb-1 flex items-center justify-between gap-2 text-[10px] tracking-wider uppercase">
+    <div className="text-text-muted mb-1 flex items-center justify-between gap-2 text-[11px] tracking-wider uppercase">
       <span>
         {tone}
         {statusSuffix(message.status)}
@@ -91,7 +91,7 @@ function Body({ message }: { message: PrChatMessage }): JSX.Element {
 
   if (message.status === 'streaming' && !message.body) {
     return (
-      <div className="border-border bg-surface text-text-muted rounded-md border px-3 py-2 text-xs italic">
+      <div className="border-border bg-surface text-text-muted rounded-md border px-3 py-2 text-sm italic">
         thinking…
       </div>
     )
@@ -100,7 +100,7 @@ function Body({ message }: { message: PrChatMessage }): JSX.Element {
   return (
     <div
       className={cn(
-        'rounded-md border px-3 py-2 text-xs leading-relaxed',
+        'rounded-md border px-3 py-2 text-sm leading-relaxed',
         isUser
           ? 'border-text-brand/30 bg-surface text-text-primary'
           : 'border-border bg-bg text-text-secondary',

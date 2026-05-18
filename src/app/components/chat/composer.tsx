@@ -26,7 +26,7 @@ export function Composer({ busy, onSend, onCancel, placeholder }: Props): JSX.El
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    const lineHeight = 18 // matches text-xs leading
+    const lineHeight = 20 // matches text-sm leading
     const max = lineHeight * MAX_ROWS
     el.style.height = `${Math.min(el.scrollHeight, max)}px`
   }, [value])
@@ -61,13 +61,13 @@ export function Composer({ busy, onSend, onCancel, placeholder }: Props): JSX.El
           onKeyDown={onKeyDown}
           rows={1}
           placeholder={placeholder ?? 'Ask anything about this PR (Cmd-Enter to send)'}
-          className="border-border bg-surface text-text-primary placeholder:text-text-muted min-w-0 flex-1 resize-none rounded-sm border px-2 py-1.5 text-xs outline-none"
+          className="border-border bg-surface text-text-primary placeholder:text-text-muted min-w-0 flex-1 resize-none rounded-sm border px-2 py-1.5 text-sm outline-none"
         />
         {busy ? (
           <button
             type="button"
             onClick={onCancel}
-            className="bg-interactive-danger/15 text-text-danger hover:bg-interactive-danger/25 shrink-0 rounded-sm px-3 py-1.5 text-xs transition-colors"
+            className="bg-interactive-danger/15 text-text-danger hover:bg-interactive-danger/25 shrink-0 rounded-sm px-3 py-1.5 text-sm transition-colors"
           >
             Stop
           </button>
@@ -78,7 +78,7 @@ export function Composer({ busy, onSend, onCancel, placeholder }: Props): JSX.El
               void trySend()
             }}
             disabled={!value.trim()}
-            className="bg-interactive-primary text-interactive-primary-fg hover:bg-interactive-primary-hover shrink-0 rounded-sm px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            className="bg-interactive-primary text-interactive-primary-fg hover:bg-interactive-primary-hover shrink-0 rounded-sm px-3 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             Send
           </button>
