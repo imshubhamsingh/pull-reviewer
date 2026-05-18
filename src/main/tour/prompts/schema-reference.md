@@ -34,6 +34,7 @@ type CodePointer = {
 type Diagram =
   | { kind: 'sequence'  | 'flowchart' | 'er' | 'class' | 'fileGraph', mermaid: string }
   | { kind: 'mockup',   mockup: MockupScene }
+  | { kind: 'state',    machine: StateMachine }
 
 type MockupScene = {
   frames:       MockupFrame[]                                        // 1-8 screens
@@ -93,6 +94,36 @@ type MockupElement =
   // Overlay
   | { type: 'modal',    x, y, w, h, source?, title?: string, children: MockupElement[] }
   | { type: 'tooltip',  x, y, source?, text: string, anchor?: 'top'|'bottom'|'left'|'right' }
+
+// XState v5-shaped machine config. Validated semantically — undefined
+// transition targets, compound states without `initial`, and missing
+// initial states all fail at parse time.
+type StateMachine = {
+  id:       string                                                          // <=80 chars; kebab or camelCase
+  initial:  string                                                          // MUST exist as a key in `states`
+  source?:  string                                                          // "<repo-relative path>:<lineStart>-<lineEnd>"
+  states:   Record<string, StateNode>                                       // map: state name -> StateNode
+}
+
+type StateNode = {
+  id?:      string
+  type?:    'atomic' | 'compound' | 'final'                                 // omitted = atomic; required for terminal states
+  entry?:   string | string[]                                               // short action descriptions: "snapshot draft", "clear toast" (<=6)
+  exit?:    string | string[]
+  on?:      Record<string, Transition | Transition[]>                       // event name (SCREAMING_SNAKE) -> transition(s); <=8 per event
+  states?:  Record<string, StateNode>                                       // present makes this a compound state — `initial` then REQUIRED
+  initial?: string                                                          // required when `states` is non-empty
+  source?:  string                                                          // click-to-jump pointer for the state itself
+}
+
+type Transition =
+  | string                                                                  // shorthand: target state name (sibling of source state)
+  | {
+      target?:  string                                                      // sibling name, ".child" for nested, "#machine.path" for absolute
+      cond?:    string                                                      // human-readable guard description ("retries < 3"); NOT executable
+      actions?: string[]                                                    // short verb-noun phrases ("save draft", "show toast"); <=6
+      source?:  string                                                      // click-to-jump pointer for this transition
+    }
 
 type ChapterCritique = {
   issues:      { severity: 'minor' | 'major' | 'blocker', body, code? }[]   // up to 10

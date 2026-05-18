@@ -39,13 +39,28 @@
 ## Diagrams
 - For 'diagram' steps, write valid Mermaid syntax. Keep diagrams under ~30 nodes — bigger than that is hard to read.
 - Prefer 'sequence' for request/call flows, 'flowchart' for control flow / decision trees, 'er' for schema relationships, 'fileGraph' for import/file relationships.
-- For visual layout of new screens / modals / dialogs / forms / wizards, use the **'mockup'** diagram kind instead — see the "UI Mockups" section below.
+- For visual layout of new screens / modals / dialogs / forms / wizards, use the **'mockup'** diagram kind — see the "UI Mockups" section below.
+- For finite-state logic (autosave / retry / polling / wizards / async upload phases), use the **'state'** diagram kind — see the "State Diagrams" section below. This is REQUIRED when the PR adds or substantially changes such logic.
+- **Mermaid text hygiene** — Mermaid treats `;` as a top-level statement separator, so it CANNOT appear inside `note over X: …` text or any other free-text label (it breaks the parse). Use `,` or `<br/>` instead. Similarly avoid stray `++` / `--` inside labels (they are activation/deactivation syntax). Keep label text plain and short.
 
 ## UI Mockups (diagram.kind = 'mockup')
 The `mockup` diagram kind is a structured JSON wireframe (not Mermaid). It renders as a Figma-style flow: every frame laid out on one pannable canvas with labeled arrows between them. Use it when the PR adds or substantially changes screens, modals, forms, or multi-step flows — the user-visible *shape*, not the call graph.
 
 - **When to emit:** at least one mockup step inside the User journey chapter when the PR introduces new UI or rearranges existing screens. Pure backend / refactor PRs skip mockups entirely.
-- **`mockup.frames[]` — one frame per visual state the user actually sees.** Re-read your `body` narration before deciding the frame list: any screen, redirect target, loading state, modal, or post-action variant that's mentioned should appear as its own frame. If the user's eyes see a different layout, it's a new frame. Don't collapse intermediate states into a "before / after" pair — the in-between frames are usually the most informative for a reviewer. Cap is 8.
+- **Step 1 — enumerate every distinct user journey** the PR introduces or substantially changes BEFORE you start drafting frames. Different journeys = different entry actors or different start screens. Example PRs and their journey lists:
+  - A sprint-management PR might have **3 journeys**: (a) operator clears a blocked item, (b) supervisor self-resolves an item, (c) automation auto-resolves at the 3-day mark.
+  - A checkout-redesign PR might have **2 journeys**: (a) returning customer with saved card, (b) new customer entering card details.
+  - A single-form PR usually has **1 journey** with multiple branches (pristine → typing → submitting → success/error).
+- **Step 2 — for EACH journey, enumerate every branch from entry to terminal state.** A branch is "complete" only when it reaches a terminal state: submit-success, dismiss/cancel, route-away to another page, or an error-terminal the user can't recover from. Walk the diff and enumerate per journey:
+  - Every conditional render path (`isLoading ? <Skeleton /> : isError ? <Error /> : data.length === 0 ? <Empty /> : <List />` → 4 frames: loading, error, empty, populated).
+  - Every modal / dialog / drawer / popover / tooltip the change introduces or modifies (each is its own frame; `open` vs `closed` are two frames).
+  - Every redirect target in an auth / SSO / multi-step flow (`/login` → external IdP → callback → `/dashboard` → 4 frames).
+  - Every distinct success / failure / retry / pending state (`200 → success view`, `4xx → inline error`, `5xx → toast + retry button` → 3 frames).
+  - Every role-gated or feature-flagged variant of the same screen (admin vs member view → 2 frames).
+  - Every form-validation state shown in the JSX (pristine, typing, valid, invalid-with-error-message — usually 2-4 frames if the diff touches validation).
+- **Step 3 — emit one mockup step per journey when the PR has multiple journeys**, NOT one giant frame jumble that mixes journeys. Each `kind: 'mockup'` step covers exactly one journey end-to-end. A 3-journey PR → 3 mockup steps in the User journey chapter, each with a focused `frames[]` and a `body` titled with the journey's name. Do NOT drop a journey because you ran out of frames — split it into its own step.
+- **`mockup.frames[]` — one frame per visual state the user actually sees within THIS journey.** If the user's eyes see a different layout, it's a new frame. Don't collapse intermediate states into a "before / after" pair — the in-between frames are usually the most informative for a reviewer. The 8-frame cap is **per step**; if a single journey legitimately needs more than 8 frames, prioritise entry → terminal coverage and merge cosmetically-similar intermediate states (e.g., "typing valid" + "typing invalid" share a layout and can be one frame with a note in `body`). Don't merge across branches.
+- **Sanity-check before finishing:** for each journey, can you trace `transitions[]` from the entry frame to every terminal frame? If a branch (e.g., the "401 expired" path) has no edges leading into it, you missed wiring it up — fix it before emitting.
 - **Coordinates inside a frame are unitless.** Frame `width` 320-960 px and `height` 240-720 px are typical. Pack elements in top-down reading order; nest with `group` for cards / sections / panels.
 - **Available element `type`s** (24 total): `box`, `group`, `divider`, `spacer`, `text`, `link`, `code`, `button`, `input`, `textarea`, `select`, `checkbox`, `radio`, `toggle`, `image`, `avatar`, `icon`, `badge`, `table`, `list`, `tabs`, `nav`, `modal`, `tooltip`. See `schema-reference.md` for required/optional fields per kind.
 - **Lo-fi by construction.** No shadows, gradients, custom colors. The only tone hints are `variant` on `button`, `tone` on `text` and `badge`, and `active` flags on `tabs`/`nav`. Don't try to mirror Tailwind colors — wireframe is the goal.
@@ -57,6 +72,38 @@ The `mockup` diagram kind is a structured JSON wireframe (not Mermaid). It rende
 - **`trigger` must be SHORT (≤24 chars).** It's a label on a tiny arrow, not a sentence. Good: `"click Login"`, `"SSO succeeds"`, `"form valid"`, `"401 — token expired"`, `"esc / outside click"`. Bad: `"success → /api/auth/me redirects to /workflow"`. Save the prose for the step's `body`; keep the trigger to a verb + noun.
 - **`fromSide`/`toSide` on a transition** are optional anchor hints (`top`/`right`/`bottom`/`left`). Use when the auto-anchor (relative position) crosses through another frame; otherwise leave unset.
 - **Read the JSX before designing the mockup.** Tailwind classes carry spatial info (`flex-col`, `gap-2`, `w-64`, `text-sm`, etc.). Don't hallucinate elements that aren't in the diff; if a screen exists outside the diff but the change references it (e.g., an SSO provider's login page), model its key landmarks (logo, fields, submit button) without speculating on details.
+
+## State Diagrams (diagram.kind = 'state')
+The `state` diagram kind renders an XState v5-shaped machine config as a labeled state-transition graph: states as boxes, transitions as arrows with `event [cond] / actions` labels. Use it when the PR adds or changes finite-state logic — the *named phases* the code progresses through, not the call graph.
+
+- **When to emit (REQUIRED):** if the PR adds or changes any of these, the User journey chapter (or a dedicated "Logic" chapter when the change is purely internal) MUST include a `kind: 'state'` step:
+  - A reducer or state union with 3+ named phases transitioning via discrete events (`type State = 'idle' | 'saving' | 'saved' | 'error'`)
+  - A polling loop with idle / polling / error / backoff phases
+  - An autosave controller, draft manager, optimistic-mutation controller, or upload manager with named phases
+  - A multi-step wizard / form with back-and-forward transitions
+  - Any retry / cooldown / circuit-breaker logic
+- **When NOT to emit:** linear API calls without persisted state, two-state toggles (just describe in prose), pure decision trees without state — use `'sequence'` or `'flowchart'` instead.
+- **Cover EVERY variation present in the diff.** Before writing the machine, walk the diff and enumerate:
+  - Every value of the state union / discriminator — each becomes a key in `states`. If the type is `'idle' | 'saving' | 'recovering' | 'committed' | 'failed' | 'giveUp'`, the machine has six states; missing any is a bug.
+  - Every `case` arm of the reducer / switch — each becomes a transition. If a state handles `SAVE | RETRY | RESET | OTHER_ERROR`, all four belong on its `on` map.
+  - Every guard condition seen in the diff (`if (attempt < MAX_RETRIES)`, `if (response.status === 409)`) — encode as `cond` on the relevant transition. Don't collapse a guarded branch into the unguarded one.
+  - Every side effect / dispatch / setter on entry, exit, or during transitions — encode as `entry` / `exit` / `actions` (verb-noun, ≤6 per slot).
+  - Every terminal state (the reducer returns no further transitions, the controller resolves / unmounts) — mark with `type: 'final'`.
+  - Every loop / retry edge (`error → saving on RETRY`) and reset edge (`error → idle on RESET`) — these are usually the most informative for a reviewer; do not omit them.
+- **Completeness check before emitting:** count the `case`s in the diff vs the transitions in your machine; count the state-union members vs the keys in `states`. If they don't match, re-read the diff and add the missing pieces.
+- **`id`** — kebab or camelCase machine name (≤80 chars). Use the code's identifier when it has one (`autosaveMachine`); otherwise pick something descriptive (`upload-state`).
+- **`initial`** — the starting state's local name. MUST exist as a key in `states`. The renderer marks it with a small entry dot.
+- **`states`** — map of state name → StateNode. State names are short and code-aligned (`idle`, `saving`, `saved`, `error`).
+- **Each StateNode** can carry:
+  - `entry` / `exit` — short action descriptions (`"snapshot draft"`, `"clear draft"`, `"show toast"`). Strings or arrays of strings. ≤6 each.
+  - `on` — event-name → transition map. Event names are SCREAMING_SNAKE (`SAVE`, `SUCCESS`, `FAILURE`, `RETRY`, `RESET`).
+  - `type: 'final'` for terminal states (renderer draws a double border).
+  - `type: 'compound'` (or just nested `states` + `initial`) for sub-machines.
+- **Transitions** can be a target name (string shorthand `"saving"`) OR a full object `{ target, cond?: string, actions?: string[], source? }`.
+- **`cond`** is a human-readable guard description (`"payload valid"`, `"retries < 3"`). NOT executable code — the renderer just shows it inside the brackets in the arrow label.
+- **`actions`** are short verb-noun phrases (`"save draft"`, `"increment retries"`, `"show error toast"`). ≤6 per transition.
+- **`source: "<repo-relative path>:<lineStart>-<lineEnd>"`** on states AND transitions enables click-to-jump. Attach it whenever you can — reviewers click through to the reducer / handler that drives the transition.
+- **Keep machines small: 3-8 states is the sweet spot.** If a flow naturally needs more, split into multiple machines (one per concern) and emit separate `state` steps in the same chapter — reference the split in `body`.
 
 ## User journey — required for UI changes
 - **If the PR touches user-facing UI** (new screens, new flows, modified interactions, new buttons/forms/dialogs, navigation changes), include a dedicated **"User journey"** chapter. Place it early — after the overview docs step but before the implementation chapters — so the reviewer understands the user-visible behaviour before diving into code.
