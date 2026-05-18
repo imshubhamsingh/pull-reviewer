@@ -58,7 +58,7 @@ export function DraftRow({
   const endLine = Math.max(draft.startLine ?? draft.line, draft.line)
   const rangeLabel = startLine === endLine ? `line ${endLine}` : `lines ${startLine}–${endLine}`
   return (
-    <div className="border-border bg-surface mx-3 my-1 rounded-md border p-2 text-xs whitespace-normal">
+    <div className="border-border bg-surface mx-3 my-5 rounded-md border p-2 text-xs whitespace-normal">
       <div className="text-text-muted mb-1 flex items-center justify-between gap-2 text-[10px] tracking-wider uppercase">
         {rangeEditing ? (
           <RangeEditor

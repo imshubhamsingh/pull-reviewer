@@ -35,7 +35,10 @@ export function AiCommentCard({
   const lens = lensStyle(finding.lens)
   const severity = severityStyle(finding.severity)
   return (
-    <div className="border-border bg-surface mx-3 my-1 rounded-md border p-2 text-xs">
+    <div
+      className="border-border bg-surface sticky left-3 my-5 rounded-md border p-2 text-xs break-words whitespace-normal"
+      style={{ maxWidth: 'calc(100cqw - 1.5rem)' }}
+    >
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Sparkles size={11} aria-hidden className="text-text-secondary" />
