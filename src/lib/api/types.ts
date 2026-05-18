@@ -557,3 +557,19 @@ export interface FileReview {
   filePath: string
   reviewedAt: string
 }
+
+/**
+ * Per-file commentable line ranges for a PR. Wire format is RLE
+ * `[start, end]` inclusive on both sides; the renderer expands to a
+ * `Set<number>` lazily per file for O(1) hot-path lookups in CodeLines.
+ */
+export interface HunksFileRanges {
+  right: [number, number][]
+  left: [number, number][]
+}
+
+export interface HunksResponse {
+  /** True when the PR exceeded the paged scan cap (currently 500 files); files past the cap are absent from `files`. */
+  truncated: boolean
+  files: Record<string, HunksFileRanges>
+}

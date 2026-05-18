@@ -29,6 +29,11 @@ interface Props {
   drafts: ReviewDraft[]
   composer: ComposerTarget | null
   selection: GutterSelection
+  /** Line numbers (on the current side) that fall inside a diff hunk — these
+   * are the lines GitHub will accept a review comment on. Lines outside this
+   * set still accept drag-select and draft creation; they just don't get the
+   * left-border accent. Empty when hunks haven't loaded yet. */
+  commentableLines?: Set<number>
   /** AI review findings on this file, keyed by `code.lineStart`. Optional. */
   aiFindingsByLine?: Map<number, Finding[]>
   /** Set of dismissed finding ids; dismissed findings don't render their gutter ✨. */
@@ -71,6 +76,7 @@ export function CodeLines(props: Props): JSX.Element {
     drafts,
     composer,
     selection,
+    commentableLines,
     aiFindingsByLine,
     aiDismissed,
     aiConverted,
@@ -82,6 +88,7 @@ export function CodeLines(props: Props): JSX.Element {
   } = props
   const containerRef = useRef<HTMLDivElement>(null)
   const focusSet = focusLines ?? EMPTY_FOCUS
+  const commentableSet = commentableLines ?? EMPTY_FOCUS
   const dismissedSet = aiDismissed ?? EMPTY_STRING_SET
   const convertedSet = aiConverted ?? EMPTY_STRING_SET
   const aiByLine = aiFindingsByLine ?? EMPTY_AI_MAP
@@ -171,6 +178,7 @@ export function CodeLines(props: Props): JSX.Element {
                   focused={focusSet.has(lineNum)}
                   selected={selection.isInRange(lineNum)}
                   drafted={draftedLines.has(lineNum)}
+                  commentable={commentableSet.has(lineNum)}
                   aiFindingCount={visibleAi.length}
                   aiIsOpen={aiIsOpen}
                   onAiToggle={visibleAi.length > 0 ? toggleAi : undefined}
@@ -270,6 +278,7 @@ interface CodeLineProps {
   focused: boolean
   selected: boolean
   drafted: boolean
+  commentable: boolean
   /** How many non-dismissed AI findings exist on this line; 0 hides the ✨ icon. */
   aiFindingCount: number
   /** Whether the inline ✨ card(s) for this line are currently expanded. */
@@ -287,6 +296,7 @@ function CodeLine({
   focused,
   selected,
   drafted,
+  commentable,
   aiFindingCount,
   aiIsOpen,
   onAiToggle,
@@ -302,6 +312,7 @@ function CodeLine({
         focused && 'line-focus',
         selected && 'line-selected',
         drafted && 'line-drafted',
+        commentable && 'line-commentable',
       )}
     >
       <span className="flex w-5 shrink-0 items-center justify-center leading-[1.55]">

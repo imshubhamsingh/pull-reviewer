@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @plugin "tailwindcss-animate";
 
@@ -10,25 +10,25 @@
  */
 
 @theme {
-  --color-bg:                   hsl(260 4% 7%);
-  --color-surface:              hsl(260 3% 10%);
-  --color-surface-hover:        hsl(260 3% 13%);
-  --color-border:               hsl(260 3% 17%);
-  --color-border-strong:        hsl(260 3% 21%);
+  --color-bg: hsl(260 4% 7%);
+  --color-surface: hsl(260 3% 10%);
+  --color-surface-hover: hsl(260 3% 13%);
+  --color-border: hsl(260 3% 17%);
+  --color-border-strong: hsl(260 3% 21%);
 
-  --color-text-primary:         hsl(260 3% 93%);
-  --color-text-secondary:       hsl(260 3% 66%);
-  --color-text-muted:           hsl(260 3% 42%);
-  --color-text-brand:           hsl(270 90% 66%);
-  --color-text-danger:          hsl(0 84% 69%);
+  --color-text-primary: hsl(260 3% 93%);
+  --color-text-secondary: hsl(260 3% 66%);
+  --color-text-muted: hsl(260 3% 42%);
+  --color-text-brand: hsl(270 90% 66%);
+  --color-text-danger: hsl(0 84% 69%);
 
-  --color-interactive-primary:        hsl(270 100% 50%);
-  --color-interactive-primary-hover:  hsl(270 100% 58%);
-  --color-interactive-primary-fg:     hsl(0 0% 100%);
-  --color-interactive-secondary:      hsl(260 3% 13%);
-  --color-interactive-secondary-hover:hsl(260 3% 17%);
-  --color-interactive-danger:         hsl(358 69% 52%);
-  --color-interactive-danger-hover:   hsl(358 72% 55%);
+  --color-interactive-primary: hsl(270 100% 50%);
+  --color-interactive-primary-hover: hsl(270 100% 58%);
+  --color-interactive-primary-fg: hsl(0 0% 100%);
+  --color-interactive-secondary: hsl(260 3% 13%);
+  --color-interactive-secondary-hover: hsl(260 3% 17%);
+  --color-interactive-danger: hsl(358 69% 52%);
+  --color-interactive-danger-hover: hsl(358 72% 55%);
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -42,14 +42,20 @@
   :root {
     color-scheme: dark;
   }
-  html, body, #root {
+  html,
+  body,
+  #root {
     height: 100%;
     margin: 0;
   }
   body {
     background-color: var(--color-bg);
     color: var(--color-text-primary);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 }
@@ -58,15 +64,36 @@
  * Scoped markdown styles for tour step bodies. Kept minimal — the prompt
  * produces simple markdown (paragraphs, lists, inline code, bold).
  */
-.markdown :where(p)              { margin: 0 0 0.65em; }
-.markdown :where(p:last-child)   { margin-bottom: 0; }
-.markdown :where(h1, h2, h3, h4) { color: var(--color-text-primary); font-weight: 600; margin: 1em 0 0.4em; }
-.markdown :where(h3)             { font-size: 0.95rem; }
-.markdown :where(h4)             { font-size: 0.85rem; }
-.markdown :where(ul, ol)         { padding-left: 1.25em; margin: 0 0 0.65em; }
-.markdown :where(li)             { margin-bottom: 0.2em; }
-.markdown                        { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-.markdown :where(code)           {
+.markdown :where(p) {
+  margin: 0 0 0.65em;
+}
+.markdown :where(p:last-child) {
+  margin-bottom: 0;
+}
+.markdown :where(h1, h2, h3, h4) {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  margin: 1em 0 0.4em;
+}
+.markdown :where(h3) {
+  font-size: 0.95rem;
+}
+.markdown :where(h4) {
+  font-size: 0.85rem;
+}
+.markdown :where(ul, ol) {
+  padding-left: 1.25em;
+  margin: 0 0 0.65em;
+}
+.markdown :where(li) {
+  margin-bottom: 0.2em;
+}
+.markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.markdown :where(code) {
   background-color: var(--color-surface);
   color: var(--color-text-primary);
   border-radius: var(--radius-xs);
@@ -74,7 +101,7 @@
   font-size: 0.85em;
   overflow-wrap: anywhere;
 }
-.markdown :where(pre)            {
+.markdown :where(pre) {
   background-color: var(--color-surface);
   border-radius: var(--radius-sm);
   padding: 0.65em 0.85em;
@@ -82,27 +109,102 @@
   margin: 0 0 0.65em;
   max-width: 100%;
 }
-.markdown :where(pre code)       { background: transparent; padding: 0; overflow-wrap: normal; word-break: normal; }
-.markdown :where(a)              { color: var(--color-text-brand); text-decoration: underline; }
-.markdown :where(strong)         { color: var(--color-text-primary); font-weight: 600; }
-.markdown a.doc-link             { background-color: var(--color-surface); border-radius: var(--radius-xs); padding: 0.05em 0.35em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
-.markdown a.doc-link:hover       { background-color: var(--color-surface-hover); color: var(--color-text-primary); }
+.markdown :where(pre code) {
+  background: transparent;
+  padding: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.markdown :where(a) {
+  color: var(--color-text-brand);
+  text-decoration: underline;
+}
+.markdown :where(strong) {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.markdown a.doc-link {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-xs);
+  padding: 0.05em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.markdown a.doc-link:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
 
 /* Code pane: tokenized line rendering. Theme supplies colors via inline style
-   on each token; we own the layout (gutter, focus, highlight, comment slots). */
-.shiki-block pre                     { margin: 0; padding: 0; line-height: 1.55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.shiki-block .code-line              { display: flex; align-items: flex-start; }
-.shiki-block .code-line .code-gutter { background: transparent; border: none; cursor: pointer; }
-.shiki-block .code-line.line-hl       { background-color: hsl(270 50% 30% / 0.18); }
-.shiki-block .code-line.line-focus    { background-color: hsl(270 80% 50% / 0.22); box-shadow: inset 2px 0 0 var(--color-text-brand); }
-.shiki-block .code-line.line-selected { background-color: hsl(45 90% 50% / 0.18); }
+   on each token; we own the layout (gutter, focus, highlight, comment slots).
+   container-type makes the block a sizing reference for inline comment cards
+   so they can clamp to the visible viewport even when <pre> overflows
+   horizontally. */
+.shiki-block {
+  container-type: inline-size;
+}
+.shiki-block pre {
+  margin: 0;
+  padding: 0;
+  line-height: 1.55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.shiki-block .code-line {
+  display: flex;
+  align-items: flex-start;
+}
+.shiki-block .code-line .code-gutter {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.shiki-block .code-line.line-hl {
+  background-color: hsl(270 50% 30% / 0.18);
+}
+.shiki-block .code-line.line-focus {
+  background-color: hsl(270 80% 50% / 0.22);
+  box-shadow: inset 2px 0 0 var(--color-text-brand);
+}
+.shiki-block .code-line.line-selected {
+  background-color: hsl(45 90% 50% / 0.18);
+}
 /* Persistent "pending comment" highlight — visible after the composer closes so
    multi-line drafts keep their range visible across the whole selection. */
-.shiki-block .code-line.line-drafted  { background-color: hsl(35 100% 50% / 0.10); box-shadow: inset 2px 0 0 hsl(35 100% 55%); }
-.shiki-block .code-content            { white-space: pre; }
+.shiki-block .code-line.line-drafted {
+  background-color: hsl(35 100% 50% / 0.1);
+  box-shadow: inset 2px 0 0 hsl(35 100% 55%);
+}
+/* Commentable indicator — left-border accent on lines GitHub will accept a
+   review comment on. Green to read as "this lands cleanly". Suppressed on
+   focused/drafted lines so those states keep their own border color. */
+.shiki-block .code-line.line-commentable:not(.line-drafted):not(.line-focus) {
+  box-shadow: inset 2px 0 0 hsl(142 70% 45%);
+}
+.shiki-block
+  .code-line.line-commentable:not(.line-drafted):not(.line-focus)
+  .code-gutter
+  > span:first-child {
+  color: hsl(142 65% 55%);
+}
+.shiki-block .code-content {
+  white-space: pre;
+}
 
 /* Diagram pane: the SVG fills a wrapper whose explicit width/height is
    natural * scale. That makes scaling a real DOM-size change so the SVG
    re-renders as vector at every zoom — no `transform: scale` rasterization. */
-.diagram-svg                     { width: 100%; height: 100%; display: block; }
-.diagram-svg svg                 { display: block; width: 100% !important; height: 100% !important; max-width: none; max-height: none; }
+.diagram-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.diagram-svg svg {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  max-height: none;
+}

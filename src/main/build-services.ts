@@ -26,6 +26,8 @@ import { ReviewDraftStore } from '@/main/reviews/review-draft.store'
 import { ReviewRouter } from '@/main/reviews/review.router'
 import { ReviewService } from '@/main/reviews/review.service'
 import { ReviewSubmitter } from '@/main/reviews/review.submitter'
+import { HunksService } from '@/main/reviews/hunks.service'
+import { HunksRouter } from '@/main/reviews/hunks.router'
 import type { BrowserWindow } from 'electron'
 import { AiFindingDismissalsStore } from '@/main/tour/ai-finding-dismissals.store'
 import { AiReviewPromptBuilder } from '@/main/tour/ai-review-prompt.builder'
@@ -61,6 +63,7 @@ export interface Services {
   clones: GitCloneManager
   files: FileSnapshotService
   reviews: ReviewService
+  hunks: HunksService
   explain: ExplainService
   chats: ChatService
   settings: SettingsStore
@@ -71,6 +74,7 @@ export interface Services {
     tours: TourRouter
     files: FileRouter
     reviews: ReviewRouter
+    hunks: HunksRouter
     explain: ExplainRouter
     chats: ChatRouter
     settings: SettingsRouter
@@ -122,6 +126,7 @@ export function buildServices(): Services {
   const reviewDrafts = new ReviewDraftStore(db.query)
   const reviewSubmitter = new ReviewSubmitter(auth)
   const reviews = new ReviewService(reviewDrafts, reviewSubmitter)
+  const hunks = new HunksService(auth)
 
   const qaStore = new QaThreadStore(db.query)
   const explain = new ExplainService(files, qaStore, cli)
@@ -172,6 +177,7 @@ export function buildServices(): Services {
     clones,
     files,
     reviews,
+    hunks,
     explain,
     chats,
     settings,
@@ -180,6 +186,7 @@ export function buildServices(): Services {
       tours: new TourRouter(tours, tourJobs),
       files: new FileRouter(files),
       reviews: new ReviewRouter(reviews),
+      hunks: new HunksRouter(hunks),
       explain: new ExplainRouter(explain),
       chats: new ChatRouter(chats),
       settings: new SettingsRouter(settings),

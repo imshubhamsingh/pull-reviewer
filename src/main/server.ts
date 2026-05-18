@@ -30,6 +30,7 @@ export function startApiServer(services: Services): Promise<RunningServer> {
   app.route('/api/tours', services.routers.tours.routes())
   app.route('/api/files', services.routers.files.routes())
   app.route('/api/reviews', services.routers.reviews.routes())
+  app.route('/api/hunks', services.routers.hunks.routes())
   app.route('/api/explain', services.routers.explain.routes())
   app.route('/api/chats', services.routers.chats.routes())
   app.route('/api/settings', services.routers.settings.routes())

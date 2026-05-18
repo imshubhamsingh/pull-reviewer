@@ -1,6 +1,7 @@
 import { http } from '@/lib/api/base'
 import type {
   CreateDraftInput,
+  HunksResponse,
   ReviewDraft,
   SubmitReviewInput,
   SubmittedReview,
@@ -19,4 +20,12 @@ export const reviews = {
   remove: (id: number) => http.del<{ deleted: boolean }>(`/api/reviews/drafts/${id}`),
   submit: (repo: string, prNumber: number, input: SubmitReviewInput) =>
     http.post<SubmittedReview>(`/api/reviews/${repo}/${prNumber}/submit`, input),
+  /**
+   * Resolve per-file commentable line ranges for a PR. Backed by a small
+   * server-side LRU; the renderer layers IndexedDB persistence on top.
+   */
+  hunks: (repo: string, prNumber: number, headSha: string) =>
+    http.get<HunksResponse>(
+      `/api/hunks/${repo}/${prNumber}?headSha=${encodeURIComponent(headSha)}`,
+    ),
 }

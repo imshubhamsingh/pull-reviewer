@@ -4,6 +4,7 @@ import { FileCode, GitCompareArrows } from 'lucide-react'
 import type { Highlighter } from 'shiki'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useGutterSelection } from '@/app/hooks/use-gutter-selection'
+import { useHunks, commentableLineSet } from '@/app/hooks/use-hunks'
 import { useShiki } from '@/app/hooks/use-shiki'
 import { chooseSha, highlightWindow, inferLang } from '@/app/lib/code-utils'
 import { cn } from '@/app/lib/utils'
@@ -64,6 +65,7 @@ export function CodePane({
   const sha = chooseSha(tour, code?.side)
   const snapshot = useFileSnapshot(repo, sha, code?.file)
   const hl = useShiki()
+  const hunks = useHunks(repo, tour.prNumber, tour.headRefOid)
 
   if (!code) return <EmptyPane>No file pinned for this step.</EmptyPane>
 
@@ -105,6 +107,7 @@ export function CodePane({
         qa={qa}
         aiFindings={aiFindings}
         aiPendingExpand={aiPendingExpand}
+        commentableLines={commentableSetForFile(hunks, code.file, code.side)}
         onJumpToRef={onJumpToRef}
         mode={viewMode}
         onModeChange={onViewModeChange}
@@ -195,6 +198,7 @@ interface ReadyPaneProps {
   qa: QaThreads
   aiFindings: ReviewFindingsState
   aiPendingExpand?: string | null
+  commentableLines: Set<number>
   onJumpToRef: (ref: CodePointer) => void
   mode: ViewMode
   onModeChange: (m: ViewMode) => void
@@ -213,6 +217,7 @@ function ReadyPane({
   qa,
   aiFindings,
   aiPendingExpand,
+  commentableLines,
   onJumpToRef,
   mode,
   onModeChange,
@@ -266,6 +271,7 @@ function ReadyPane({
         drafts={fileDrafts}
         composer={composer}
         selection={selection}
+        commentableLines={commentableLines}
         aiFindingsByLine={aiByLine}
         aiDismissed={dismissedFile}
         aiConverted={convertedFile}
@@ -311,6 +317,23 @@ function ReadyPane({
     </div>
   )
 }
+
+/**
+ * Pick the per-file commentable line set for the file currently in view. Uses
+ * `code.side` to choose between the diff's left / right line numbering. Falls
+ * back to an empty set while hunks are still loading (no false-positive
+ * highlight; lines just look like today until the data arrives).
+ */
+function commentableSetForFile(
+  hunks: ReturnType<typeof useHunks>,
+  file: string,
+  side: CodePointer['side'],
+): Set<number> {
+  if (hunks.kind !== 'ready') return EMPTY_LINES
+  return commentableLineSet(hunks.response.files[file], side === 'before' ? 'left' : 'right')
+}
+
+const EMPTY_LINES: Set<number> = new Set()
 
 function collectIds(
   aiByLine: Map<number, Finding[]>,

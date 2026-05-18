@@ -5,6 +5,7 @@ import { CodeLines, type ComposerTarget } from '@/app/components/code-lines'
 import { DiffPane } from '@/app/components/diff-pane'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useGutterSelection } from '@/app/hooks/use-gutter-selection'
+import { useHunks, commentableLineSet } from '@/app/hooks/use-hunks'
 import { useShiki } from '@/app/hooks/use-shiki'
 import { inferLang } from '@/app/lib/code-utils'
 import { cn } from '@/app/lib/utils'
@@ -61,6 +62,14 @@ export function StandaloneCodeView({
   }, [headSha, ref.file])
   const snapshot = useFileSnapshot(repo, currentSha, ref.file)
   const hl = useShiki()
+  const hunks = useHunks(repo, prNumber, headSha)
+  // Chat refs nearly always point at the head side; if we silently fell back
+  // to base, treat the file as non-commentable (the base-side hunks have a
+  // different line numbering and the user can't comment on base-only lines).
+  const commentableLines =
+    !viewingBaseFor(currentSha, headSha) && hunks.kind === 'ready'
+      ? commentableLineSet(hunks.response.files[ref.file], 'right')
+      : EMPTY_LINES
 
   // If head returned a "missing file" snapshot (deleted in this PR) and a base
   // sha is available, retry there automatically — the chat ref's lines were
@@ -113,6 +122,7 @@ export function StandaloneCodeView({
                 qa={qa}
                 hl={hl}
                 viewingBase={viewingBase}
+                commentableLines={commentableLines}
               />
             ))
             .exhaustive()
@@ -131,6 +141,13 @@ interface ReadyBodyProps {
   qa: QaThreads
   hl: ReturnType<typeof useShiki>
   viewingBase: boolean
+  commentableLines: Set<number>
+}
+
+const EMPTY_LINES: Set<number> = new Set()
+
+function viewingBaseFor(currentSha: string, headSha: string): boolean {
+  return currentSha !== headSha
 }
 
 function ReadyBody({
@@ -142,6 +159,7 @@ function ReadyBody({
   qa,
   hl,
   viewingBase,
+  commentableLines,
 }: ReadyBodyProps): JSX.Element {
   const [composer, setComposer] = useState<ComposerTarget | null>(null)
   const selection = useGutterSelection({
@@ -182,6 +200,7 @@ function ReadyBody({
       drafts={fileDrafts}
       composer={composer}
       selection={selection}
+      commentableLines={commentableLines}
       onCloseComposer={() => {
         setComposer(null)
         selection.clear()

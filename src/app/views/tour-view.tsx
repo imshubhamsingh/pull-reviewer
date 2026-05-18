@@ -8,6 +8,8 @@ import { useFileReviews } from '@/app/hooks/use-file-reviews'
 import { useQaThreads, type QaThreads } from '@/app/hooks/use-qa-threads'
 import { useReviewDrafts, type ReviewDrafts } from '@/app/hooks/use-review-drafts'
 import { useReviewFindings, type ReviewFindingsState } from '@/app/hooks/use-review-findings'
+import { prewarmHunks, useHunks } from '@/app/hooks/use-hunks'
+import { HunksTruncatedBanner } from '@/app/components/hunks-truncated-banner'
 import { ChapterStepper } from '@/app/components/chapter-stepper'
 import { ChatPane } from '@/app/components/chat/chat-pane'
 import { RightPaneToggle, type RightPaneMode } from '@/app/components/chat/right-pane-toggle'
@@ -87,6 +89,13 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
   const completions = useChapterCompletions(repo, tour.prNumber, tour.headRefOid)
   const fileReviews = useFileReviews(repo, tour.prNumber, tour.headRefOid)
   const aiFindings = useReviewFindings(tour.review, repo, tour.prNumber, tour.headRefOid)
+  // Warm the commentable-lines cache the moment the tour resolves so the
+  // very first file open already has the visual indicator. CodePane also
+  // calls useHunks on mount as a lazy fallback (deduped in-flight).
+  useEffect(() => {
+    prewarmHunks(repo, tour.prNumber, tour.headRefOid)
+  }, [repo, tour.prNumber, tour.headRefOid])
+  const hunks = useHunks(repo, tour.prNumber, tour.headRefOid)
   // Walking the stepper exits standalone view so the user isn't stranded.
   useEffect(() => {
     setCenterState((current) => (current.kind === 'standalone' ? { kind: 'step' } : current))
@@ -193,6 +202,11 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
           />
         </div>
       )}
+      {hunks.kind === 'ready' && hunks.response.truncated && (
+        <div className="px-4 pt-3">
+          <HunksTruncatedBanner />
+        </div>
+      )}
       <div className="bg-border grid min-h-0 flex-1 grid-cols-[1fr_2fr_1fr] gap-px">
         <Section title="Docs">
           {nav.current ? (
@@ -208,6 +222,11 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
               }
               onDeleteQa={qa.remove}
               onJumpToRef={jumpToRef}
+              onJumpToFinding={(findingId, code) => {
+                if (code.lineStart == null) return
+                setPendingFindingExpand(findingId)
+                jumpToRef(code)
+              }}
             />
           ) : (
             <CenterMessage>No step selected.</CenterMessage>
