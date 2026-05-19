@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import { ReviewSummaryModal, type SubmitOptions } from '@/app/components/review-summary-modal'
+import { useResolvedBaseSha } from '@/app/hooks/use-resolved-base-sha'
 import type { TourResult } from '@/lib/api'
 import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
 
@@ -25,6 +26,9 @@ export function SubmitReviewButton({ repo, tour, drafts, onJumpToFile }: Props):
   const [lastSubmittedUrl, setLastSubmittedUrl] = useState<string | undefined>()
   const [reviewing, setReviewing] = useState(false)
   const count = drafts.drafts.length
+  // Resolve base SHA from GitHub if the tour didn't record one, so deleted-line
+  // snippets in the submit modal still have a source to load.
+  const resolvedBase = useResolvedBaseSha(repo, tour.baseRefOid, tour.prNumber)
 
   useEffect(() => {
     if (!lastSubmittedUrl) return
@@ -87,7 +91,9 @@ export function SubmitReviewButton({ repo, tour, drafts, onJumpToFile }: Props):
         <ReviewSummaryModal
           drafts={drafts.drafts}
           repo={repo}
-          sha={tour.headRefOid}
+          headSha={tour.headRefOid}
+          baseSha={resolvedBase.sha}
+          baseShaResolving={resolvedBase.state === 'resolving'}
           submitting={busy}
           error={error}
           onCancel={() => {

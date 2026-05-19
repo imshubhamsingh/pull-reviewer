@@ -15,7 +15,16 @@ export interface SubmitOptions {
 interface Props {
   drafts: ReviewDraft[]
   repo: string
-  sha: string
+  headSha: string
+  /** Base SHA, used to fetch the base-revision snippet for `side: 'before'`
+   *  drafts (comments anchored to deleted lines). Null when the tour was
+   *  recorded before base resolution shipped AND GitHub returned nothing —
+   *  `before` drafts in that case fall back to a notice. */
+  baseSha: string | null
+  /** True while the parent is still resolving the base SHA from GitHub.
+   *  Used to show "Loading…" instead of the "No base revision" notice during
+   *  the resolve. */
+  baseShaResolving?: boolean
   submitting: boolean
   error: string | undefined
   onCancel: () => void
@@ -34,7 +43,9 @@ interface Props {
 export function ReviewSummaryModal({
   drafts,
   repo,
-  sha,
+  headSha,
+  baseSha,
+  baseShaResolving = false,
   submitting,
   error,
   onCancel,
@@ -80,7 +91,9 @@ export function ReviewSummaryModal({
                 file={file}
                 drafts={fileDrafts}
                 repo={repo}
-                sha={sha}
+                headSha={headSha}
+                baseSha={baseSha}
+                baseShaResolving={baseShaResolving}
                 onJumpToFile={onJumpToFile}
               />
             ))
@@ -247,16 +260,24 @@ function FileGroup({
   file,
   drafts,
   repo,
-  sha,
+  headSha,
+  baseSha,
+  baseShaResolving,
   onJumpToFile,
 }: {
   file: string
   drafts: ReviewDraft[]
   repo: string
-  sha: string
+  headSha: string
+  baseSha: string | null
+  baseShaResolving: boolean
   onJumpToFile?: (file: string, line: number) => void
 }): JSX.Element {
-  const snapshot = useFileSnapshot(repo, sha, file)
+  // Skip the base fetch entirely when no draft on this file needs it; saves a
+  // round-trip on files where every comment is `after`.
+  const needsBase = drafts.some((d) => d.side === 'before')
+  const headSnap = useFileSnapshot(repo, headSha, file)
+  const baseSnap = useFileSnapshot(repo, baseSha ?? '', needsBase && baseSha ? file : undefined)
   return (
     <section className="border-border bg-surface mb-3 overflow-hidden rounded-md border">
       <header className="border-border bg-bg/60 border-b px-3 py-1.5 font-mono text-[11px]">
@@ -268,7 +289,12 @@ function FileGroup({
       <ul className="divide-border divide-y">
         {drafts.map((d) => (
           <li key={d.id} className="px-3 py-3">
-            <Snippet draft={d} snapshot={snapshot} />
+            <Snippet
+              draft={d}
+              snapshot={d.side === 'before' ? baseSnap : headSnap}
+              missingBaseSha={d.side === 'before' && !baseSha && !baseShaResolving}
+              resolvingBaseSha={d.side === 'before' && !baseSha && baseShaResolving}
+            />
             <CommentBody
               body={d.body}
               side={d.side}
@@ -284,10 +310,24 @@ function FileGroup({
 function Snippet({
   draft,
   snapshot,
+  missingBaseSha,
+  resolvingBaseSha,
 }: {
   draft: ReviewDraft
   snapshot: ReturnType<typeof useFileSnapshot>
+  missingBaseSha: boolean
+  resolvingBaseSha: boolean
 }): JSX.Element {
+  if (resolvingBaseSha) {
+    return <div className="text-text-muted py-2 text-[11px]">Resolving base revision…</div>
+  }
+  if (missingBaseSha) {
+    return (
+      <div className="text-text-muted py-2 text-[11px]">
+        No base revision available — can&apos;t render the deleted-line snippet.
+      </div>
+    )
+  }
   if (snapshot.kind === 'loading' || snapshot.kind === 'idle') {
     return <div className="text-text-muted py-2 text-[11px]">Loading snippet…</div>
   }

@@ -288,6 +288,7 @@ function ReadyView({ repo, tour, drafts, qa, onRegenerate, onBack }: ReadyProps)
               currentFile={currentFile}
               coverage={coverage}
               reviewed={fileReviews.reviewed}
+              drafts={drafts.drafts}
               onPick={jumpToFile}
               onToggleReviewed={fileReviews.toggle}
             />
@@ -405,6 +406,7 @@ function renderCenter(args: CenterArgs): JSX.Element {
         currentFile={currentFile}
         coverage={coverage}
         reviewed={reviewed}
+        drafts={drafts.drafts}
         onPick={jumpToFile}
         onToggleReviewed={onToggleReviewed}
       />

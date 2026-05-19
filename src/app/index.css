@@ -193,6 +193,22 @@
   white-space: pre;
 }
 
+/* Same accent palette as the CodePane indicators, applied to diff rows.
+   `.diff-row` is the per-row wrapper in DiffColumns / UnifiedDiff. Selection
+   tinting is handled inline by the row (it has to override the diff red/green
+   background) — we only style the persistent accents here. */
+.diff-row .code-gutter {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.diff-row.line-commentable {
+  box-shadow: inset 2px 0 0 hsl(142 70% 45%);
+}
+.diff-row.line-commentable .code-gutter > span:first-child {
+  color: hsl(142 65% 55%);
+}
+
 /* Diagram pane: the SVG fills a wrapper whose explicit width/height is
    natural * scale. That makes scaling a real DOM-size change so the SVG
    re-renders as vector at every zoom — no `transform: scale` rasterization. */

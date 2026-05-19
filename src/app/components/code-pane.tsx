@@ -9,6 +9,7 @@ import { useShiki } from '@/app/hooks/use-shiki'
 import { chooseSha, highlightWindow, inferLang } from '@/app/lib/code-utils'
 import { cn } from '@/app/lib/utils'
 import { DiffPane } from '@/app/components/diff-pane'
+import { OtherSideDraftsBanner } from '@/app/components/other-side-drafts-banner'
 import type {
   CodePointer,
   Finding,
@@ -86,6 +87,9 @@ export function CodePane({
           file={code.file}
           prNumber={tour.prNumber}
           layout={diffLayout}
+          drafts={drafts}
+          qa={qa}
+          chapterId={chapterId}
         />
       </div>
     )
@@ -230,7 +234,13 @@ function ReadyPane({
   const selection = useGutterSelection({
     onCommit: (range) => setComposer({ startLine: range.startLine, endLine: range.endLine }),
   })
-  const fileDrafts = drafts.drafts.filter((d) => d.file === code.file)
+  // Only render drafts whose side matches the currently-shown side of the file.
+  // A `before`-side draft anchored to baseLine 45 has nothing to do with line 45
+  // of the head-side file — surfacing it inline would point at unrelated code.
+  // Those drafts still surface in the Diff view (in the base column) and in the
+  // submit modal.
+  const reviewSide: 'before' | 'after' = code.side === 'before' ? 'before' : 'after'
+  const fileDrafts = drafts.drafts.filter((d) => d.file === code.file && d.side === reviewSide)
 
   if (snap.encoding !== 'utf8' || !snap.content) {
     return (
@@ -245,10 +255,13 @@ function ReadyPane({
   }
   if (!hl) return <EmptyPane>Loading highlighter…</EmptyPane>
   const { focusLines, scrollTo, range } = highlightWindow(code)
-  const reviewSide = code.side === 'before' ? 'before' : 'after'
   const aiByLine = aiFindings.byLineMap(code.file)
   const dismissedFile = collectIds(aiByLine, (id) => aiFindings.isDismissed(id))
   const convertedFile = collectIds(aiByLine, (id) => aiFindings.isConverted(id))
+  const otherSide: 'before' | 'after' = reviewSide === 'before' ? 'after' : 'before'
+  const otherSideDraftCount = drafts.drafts.filter(
+    (d) => d.file === code.file && d.side === otherSide,
+  ).length
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -259,6 +272,16 @@ function ReadyPane({
         onDiffLayoutChange={onDiffLayoutChange}
         header={<CodeHeader file={code.file} sha={sha} side={code.side} />}
       />
+      {otherSideDraftCount > 0 && (
+        <OtherSideDraftsBanner
+          count={otherSideDraftCount}
+          otherSide={otherSide}
+          onJumpToDiff={() => {
+            onModeChange('diff')
+            onDiffLayoutChange('split')
+          }}
+        />
+      )}
       <CodeLines
         highlighter={hl}
         content={snap.content}

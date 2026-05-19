@@ -3,10 +3,14 @@ import { match } from 'ts-pattern'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useShiki } from '@/app/hooks/use-shiki'
 import { useResolvedBaseSha } from '@/app/hooks/use-resolved-base-sha'
+import { useDiffSurface } from '@/app/hooks/use-diff-surface'
 import { diffLines, type DiffLine } from '@/app/lib/diff-lines'
 import { DiffColumns } from '@/app/components/diff-split'
 import { UnifiedDiff } from '@/app/components/diff-unified'
 import { DiffHeader, FileBanner, Notice, type FileStatus } from '@/app/components/diff-helpers'
+import type { DiffSurface } from '@/app/components/diff-surface'
+import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
+import type { QaThreads } from '@/app/hooks/use-qa-threads'
 
 /**
  * Side-by-side diff between base and head revisions of a single file.
@@ -15,8 +19,10 @@ import { DiffHeader, FileBanner, Notice, type FileStatus } from '@/app/component
  * stay aligned without a scroll-sync hack. Deletions tint the left side red;
  * additions tint the right side green. Context lines stay neutral on both.
  *
- * Comments / drafts / AI findings are intentionally NOT supported here — those
- * stay on the regular Code mode.
+ * Drag-select on a line gutter opens an inline composer (full-width, between
+ * the diff bands) — letting the user comment on deleted lines (`side='before'`)
+ * which the regular Code pane can't reach. Pass `drafts` / `qa` / `chapterId`
+ * to enable the flow; omit them for a read-only diff view.
  */
 
 export type DiffLayout = 'split' | 'unified'
@@ -32,6 +38,10 @@ interface Props {
   /** `split` = two columns side-by-side with synced horizontal scroll.
    *  `unified` = one column with stacked +/- rows (GitHub's compact view). */
   layout?: DiffLayout
+  /** Pass to enable the comment-creation flow. Omit for read-only view. */
+  drafts?: ReviewDrafts
+  qa?: QaThreads
+  chapterId?: string
 }
 
 export function DiffPane({
@@ -41,6 +51,9 @@ export function DiffPane({
   file,
   prNumber,
   layout = 'split',
+  drafts,
+  qa,
+  chapterId,
 }: Props): JSX.Element {
   const resolvedBaseSha = useResolvedBaseSha(repo, baseSha, prNumber)
   const headSnap = useFileSnapshot(repo, headSha, file)
@@ -87,39 +100,73 @@ export function DiffPane({
   const headMissing = headSnap.snap.encoding !== 'utf8' || !headSnap.snap.content
   return (
     <DiffBody
+      repo={repo}
+      prNumber={prNumber}
       file={file}
+      headSha={headSha}
+      baseSha={resolvedBaseSha.sha ?? ''}
       baseContent={baseContent}
       headContent={headContent}
       baseMissing={baseMissing}
       headMissing={headMissing}
       layout={layout}
       hl={hl}
+      drafts={drafts}
+      qa={qa}
+      chapterId={chapterId}
     />
   )
 }
 
-function DiffBody({
-  file,
-  baseContent,
-  headContent,
-  baseMissing,
-  headMissing,
-  layout,
-  hl,
-}: {
+interface DiffBodyProps {
+  repo: string
+  prNumber: number | undefined
   file: string
+  headSha: string
+  baseSha: string
   baseContent: string
   headContent: string
   baseMissing: boolean
   headMissing: boolean
   layout: DiffLayout
   hl: ReturnType<typeof useShiki>
-}): JSX.Element {
+  drafts: ReviewDrafts | undefined
+  qa: QaThreads | undefined
+  chapterId: string | undefined
+}
+
+function DiffBody({
+  repo,
+  prNumber,
+  file,
+  headSha,
+  baseSha,
+  baseContent,
+  headContent,
+  baseMissing,
+  headMissing,
+  layout,
+  hl,
+  drafts,
+  qa,
+  chapterId,
+}: DiffBodyProps): JSX.Element {
   const rows = useMemo<DiffLine[]>(() => {
     const baseLines = baseContent ? baseContent.split('\n') : []
     const headLines = headContent ? headContent.split('\n') : []
     return diffLines(baseLines, headLines)
   }, [baseContent, headContent])
+
+  const surface: DiffSurface | null = useDiffSurface({
+    repo,
+    prNumber,
+    file,
+    headSha,
+    baseSha,
+    drafts,
+    qa,
+    chapterId,
+  })
 
   if (rows.length === 0) {
     return <Notice>Nothing to diff (both revisions are empty).</Notice>
@@ -135,12 +182,12 @@ function DiffBody({
 
   return match(layout)
     .with('unified', () => (
-      <UnifiedDiff rows={rows} hl={hl} file={file}>
+      <UnifiedDiff rows={rows} hl={hl} file={file} surface={surface}>
         <FileBanner file={file} status={fileStatus} />
       </UnifiedDiff>
     ))
     .with('split', () => (
-      <DiffColumns rows={rows} hl={hl} file={file}>
+      <DiffColumns rows={rows} hl={hl} file={file} surface={surface}>
         <FileBanner file={file} status={fileStatus} />
         <DiffHeader />
       </DiffColumns>

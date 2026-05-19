@@ -4,13 +4,16 @@ import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { FileSearch, fuzzyFilterFiles } from '@/app/components/file-search'
 import { cn } from '@/app/lib/utils'
 import type { FileCoverage, FileCoverageKind } from '@/app/hooks/use-file-coverage'
-import type { PrFile } from '@/lib/api'
+import type { PrFile, ReviewDraft } from '@/lib/api'
 
 interface Props {
   files: PrFile[]
   currentFile?: string
   coverage: FileCoverage
   reviewed: Set<string>
+  /** Pending review drafts. FileMap buckets these by file to render a 💬
+   *  indicator on rows with pending comments. Empty array = no indicators. */
+  drafts: ReviewDraft[]
   onPick: (path: string) => void
   onToggleReviewed: (path: string) => void
 }
@@ -20,6 +23,7 @@ export function FileMap({
   currentFile,
   coverage,
   reviewed,
+  drafts,
   onPick,
   onToggleReviewed,
 }: Props): JSX.Element {
@@ -33,6 +37,7 @@ export function FileMap({
   }, [currentFile])
 
   const filtered = useMemo(() => fuzzyFilterFiles(files, query), [files, query])
+  const draftsByFile = useMemo(() => bucketDraftsByFile(drafts), [drafts])
 
   if (files.length === 0) {
     return (
@@ -63,6 +68,7 @@ export function FileMap({
                   chapter={coverage.firstChapter(f.path)}
                   chapterIdx={coverage.firstChapterIdx(f.path)}
                   reviewed={reviewed.has(f.path)}
+                  draftCount={draftsByFile.get(f.path) ?? 0}
                   onPick={onPick}
                   onToggleReviewed={onToggleReviewed}
                 />
@@ -108,6 +114,7 @@ interface RowProps {
   chapter: string | undefined
   chapterIdx: number | undefined
   reviewed: boolean
+  draftCount: number
   onPick: (path: string) => void
   onToggleReviewed: (path: string) => void
 }
@@ -119,6 +126,7 @@ function FileRow({
   chapter,
   chapterIdx,
   reviewed,
+  draftCount,
   onPick,
   onToggleReviewed,
 }: RowProps): JSX.Element {
@@ -136,12 +144,13 @@ function FileRow({
       <button
         type="button"
         onClick={() => onPick(file.path)}
-        title={tooltipFor(file.path, kind, chapter, reviewed)}
+        title={tooltipFor(file.path, kind, chapter, reviewed, draftCount)}
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         <CoverageDot kind={kind} active={active} />
         <PathLabel path={file.path} />
         <ChapterBadge idx={chapterIdx} kind={kind} />
+        {draftCount > 0 && <DraftBadge count={draftCount} />}
         <DiffCount additions={file.additions} deletions={file.deletions} />
       </button>
       <button
@@ -230,16 +239,39 @@ function DiffCount({
   )
 }
 
+function bucketDraftsByFile(drafts: ReviewDraft[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const d of drafts) out.set(d.file, (out.get(d.file) ?? 0) + 1)
+  return out
+}
+
+function DraftBadge({ count }: { count: number }): JSX.Element {
+  return (
+    <span
+      title={`${count} pending review ${count === 1 ? 'comment' : 'comments'} on this file`}
+      className="text-text-brand shrink-0 font-mono text-[10px] tabular-nums"
+    >
+      💬{count > 1 ? count : ''}
+    </span>
+  )
+}
+
 function tooltipFor(
   path: string,
   kind: FileCoverageKind,
   chapter: string | undefined,
   reviewed: boolean,
+  draftCount: number,
 ): string {
   const base = match(kind)
     .with('pinned', () => (chapter ? `${path}\nPinned in: ${chapter}` : path))
     .with('referenced', () => (chapter ? `${path}\nReferenced in: ${chapter}` : path))
     .with('uncovered', () => `${path}\nNot covered by the tour — click to open standalone`)
     .exhaustive()
-  return reviewed ? `${base}\n· Reviewed` : base
+  const parts: string[] = [base]
+  if (draftCount > 0) {
+    parts.push(`· ${draftCount} pending ${draftCount === 1 ? 'comment' : 'comments'}`)
+  }
+  if (reviewed) parts.push('· Reviewed')
+  return parts.join('\n')
 }

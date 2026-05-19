@@ -1,80 +1,58 @@
-import { type JSX } from 'react'
+import { useMemo, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import type { useShiki } from '@/app/hooks/use-shiki'
 import type { DiffLine } from '@/app/lib/diff-lines'
-import { CodeContent, DIFF_STYLE } from '@/app/components/diff-helpers'
+import { DiffCommentBlock } from '@/app/components/diff-comment-block'
+import { DiffUnifiedRow } from '@/app/components/diff-unified-row'
+import { anchorsForUnifiedRow, interleave, type Block } from '@/app/components/diff-blocks'
+import type { DiffSurface } from '@/app/components/diff-surface'
 
 /**
  * Single-column unified diff. Each row prefixed with `+` / `-` / ` ` and a
- * single line-number gutter that shows the base or head line per row.
- * Compact, GitHub-style. Horizontal scroll lives on the outer container.
+ * pair of line-number gutters (base | head). Comment bands render full-width
+ * between rows. Compact, GitHub-style.
+ *
+ * Without `surface`, the bands chunker has no drafts or composer to inject;
+ * the layout degrades to a flat read-only list of rows.
  */
 export function UnifiedDiff({
   rows,
   hl,
   file,
   children,
+  surface,
 }: {
   rows: DiffLine[]
   hl: ReturnType<typeof useShiki>
   file: string
   children: React.ReactNode
+  surface?: DiffSurface | null
 }): JSX.Element {
+  const blocks = useMemo<Block[]>(() => {
+    if (!surface) return rows.map((row, index) => ({ kind: 'row', row, index }))
+    return interleave(rows, surface.fileDrafts, surface.composer, anchorsForUnifiedRow)
+  }, [rows, surface])
+
   return (
     <div className="bg-bg min-h-0 flex-1 overflow-auto font-mono text-xs">
       {children}
-      <div>
-        {rows.map((row, i) => (
-          <UnifiedRow key={i} row={row} hl={hl} file={file} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function UnifiedRow({
-  row,
-  hl,
-  file,
-}: {
-  row: DiffLine
-  hl: ReturnType<typeof useShiki>
-  file: string
-}): JSX.Element {
-  const { bg, marker, markerColor } = match(row.kind)
-    .with('add', () => ({
-      bg: DIFF_STYLE.addBg,
-      marker: '+',
-      markerColor: 'rgb(74, 222, 128)',
-    }))
-    .with('del', () => ({
-      bg: DIFF_STYLE.delBg,
-      marker: '-',
-      markerColor: 'rgb(251, 113, 133)',
-    }))
-    .with('eq', () => ({
-      bg: undefined as string | undefined,
-      marker: ' ',
-      markerColor: 'var(--color-text-muted)',
-    }))
-    .exhaustive()
-  return (
-    <div className="flex leading-[1.55]" style={{ backgroundColor: bg }}>
-      <span className="text-text-muted/60 w-10 shrink-0 px-1 text-right text-[10px] tabular-nums select-none">
-        {row.baseLine ?? ''}
-      </span>
-      <span className="text-text-muted/60 w-10 shrink-0 px-1 text-right text-[10px] tabular-nums select-none">
-        {row.headLine ?? ''}
-      </span>
-      <span
-        className="w-4 shrink-0 text-center font-mono select-none"
-        style={{ color: markerColor }}
-      >
-        {marker}
-      </span>
-      <span className="pr-3 whitespace-pre">
-        <CodeContent content={row.content} hl={hl} file={file} />
-      </span>
+      {blocks.map((b, i) =>
+        match(b)
+          .with({ kind: 'row' }, (block) => (
+            <DiffUnifiedRow key={i} row={block.row} hl={hl} file={file} surface={surface ?? null} />
+          ))
+          .with({ kind: 'drafts' }, (block) =>
+            surface ? (
+              <DiffCommentBlock key={i} block={block} surface={surface} file={file} />
+            ) : null,
+          )
+          .with({ kind: 'composer' }, (block) =>
+            surface ? (
+              <DiffCommentBlock key={i} block={block} surface={surface} file={file} />
+            ) : null,
+          )
+          .exhaustive(),
+      )}
     </div>
   )
 }
