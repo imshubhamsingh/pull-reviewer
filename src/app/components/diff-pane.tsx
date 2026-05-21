@@ -4,8 +4,10 @@ import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useShiki } from '@/app/hooks/use-shiki'
 import { useResolvedBaseSha } from '@/app/hooks/use-resolved-base-sha'
 import { useDiffSurface } from '@/app/hooks/use-diff-surface'
+import { useDiffPaneSearch } from '@/app/hooks/use-diff-pane-search'
 import { diffLines, type DiffLine } from '@/app/lib/diff-lines'
-import { DiffColumns } from '@/app/components/diff-split'
+import { CodeSearchOverlay } from '@/app/components/code-search-overlay'
+import { DiffColumns, type DiffSearchPayload } from '@/app/components/diff-split'
 import { UnifiedDiff } from '@/app/components/diff-unified'
 import { DiffHeader, FileBanner, Notice, type FileStatus } from '@/app/components/diff-helpers'
 import type { DiffSurface } from '@/app/components/diff-surface'
@@ -168,6 +170,12 @@ function DiffBody({
     chapterId,
   })
 
+  const { search, matches: searchMatches, matchCount, wrapperRef } = useDiffPaneSearch(rows)
+  const searchPayload: DiffSearchPayload = {
+    matches: searchMatches,
+    activeIndex: search.activeIndex,
+  }
+
   if (rows.length === 0) {
     return <Notice>Nothing to diff (both revisions are empty).</Notice>
   }
@@ -180,17 +188,21 @@ function DiffBody({
         ? 'unchanged'
         : 'changed'
 
-  return match(layout)
-    .with('unified', () => (
-      <UnifiedDiff rows={rows} hl={hl} file={file} surface={surface}>
-        <FileBanner file={file} status={fileStatus} />
-      </UnifiedDiff>
-    ))
-    .with('split', () => (
-      <DiffColumns rows={rows} hl={hl} file={file} surface={surface}>
-        <FileBanner file={file} status={fileStatus} />
-        <DiffHeader />
-      </DiffColumns>
-    ))
-    .exhaustive()
+  return (
+    <div ref={wrapperRef} className="flex h-full min-h-0 flex-col">
+      <FileBanner file={file} status={fileStatus} />
+      {layout === 'split' && <DiffHeader />}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <CodeSearchOverlay search={search} matchCount={matchCount} />
+        {match(layout)
+          .with('unified', () => (
+            <UnifiedDiff rows={rows} hl={hl} file={file} surface={surface} search={searchPayload} />
+          ))
+          .with('split', () => (
+            <DiffColumns rows={rows} hl={hl} file={file} surface={surface} search={searchPayload} />
+          ))
+          .exhaustive()}
+      </div>
+    </div>
+  )
 }

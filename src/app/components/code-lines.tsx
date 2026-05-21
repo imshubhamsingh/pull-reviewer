@@ -8,7 +8,15 @@ import { AiCommentCard } from '@/app/components/ai-comment-card'
 import { DraftRow } from '@/app/components/draft-row'
 import { LineComposer } from '@/app/components/line-composer'
 import type { AskContext } from '@/app/components/ask-ai-panel'
+import { highlightTokens } from '@/app/lib/highlight-matches'
+import type { LineMatchRange } from '@/app/lib/code-search'
 import type { AskStreamEvent, Finding, QaThread, ReviewDraft, SymbolLocation } from '@/lib/api'
+
+export interface CodeSearchMatch {
+  line: number
+  start: number
+  end: number
+}
 
 export interface ComposerTarget {
   startLine: number
@@ -55,6 +63,23 @@ interface Props {
     input: { file: string; sha: string; startLine: number; endLine: number; question: string },
     onEvent: (e: AskStreamEvent) => void,
   ) => Promise<QaThread>
+  /** Hand a free-form question + the selected snippet's `(file, startLine,
+   *  endLine, content slice)` to the host so it can pre-fill the right-pane
+   *  chat composer. CodeLines builds the markdown wrapper; the host just
+   *  pivots panes and pre-fills. */
+  onSendToChat?: (input: {
+    file: string
+    startLine: number
+    endLine: number
+    snippet: string
+    question: string
+  }) => void
+  /** Search matches in this file's content; the line+range tuples used to
+   *  paint highlights and to scroll the active match into view. */
+  searchMatches?: CodeSearchMatch[]
+  /** Index into `searchMatches` of the currently-active match — the one
+   *  that should be flashed + scrolled into view. -1 / undefined disables. */
+  searchActiveIndex?: number
 }
 
 interface TokensPayload {
@@ -85,6 +110,9 @@ export function CodeLines(props: Props): JSX.Element {
     onAiConvert,
     onAiJumpSymbol,
     onAskAiStream,
+    onSendToChat,
+    searchMatches,
+    searchActiveIndex,
   } = props
   const containerRef = useRef<HTMLDivElement>(null)
   const focusSet = focusLines ?? EMPTY_FOCUS
@@ -134,11 +162,33 @@ export function CodeLines(props: Props): JSX.Element {
     return s
   }, [drafts])
 
+  // Bucket search matches by line so the per-line render is O(matches-on-this-line).
+  const matchesByLine = useMemo(() => bucketMatchesByLine(searchMatches), [searchMatches])
+  const activeMatch =
+    searchMatches && searchActiveIndex != null && searchActiveIndex >= 0
+      ? searchMatches[searchActiveIndex]
+      : undefined
+
   useEffect(() => {
     if (scrollTo == null || !containerRef.current) return
     const target = containerRef.current.querySelector<HTMLElement>(`[data-line="${scrollTo}"]`)
     target?.scrollIntoView({ block: 'center' })
   }, [scrollTo, payload])
+
+  // Scroll the active search match into view + flash it briefly. The flash is
+  // driven by a temporary attribute that the CSS animation listens for.
+  useEffect(() => {
+    if (!activeMatch || !containerRef.current) return
+    const lineEl = containerRef.current.querySelector<HTMLElement>(
+      `[data-line="${activeMatch.line}"]`,
+    )
+    lineEl?.scrollIntoView({ block: 'center' })
+    const activeSeg = lineEl?.querySelector<HTMLElement>('[data-search-active="true"]')
+    if (!activeSeg) return
+    activeSeg.classList.add('search-match-active-flash')
+    const id = window.setTimeout(() => activeSeg.classList.remove('search-match-active-flash'), 700)
+    return () => window.clearTimeout(id)
+  }, [activeMatch])
 
   return (
     <div
@@ -169,6 +219,11 @@ export function CodeLines(props: Props): JSX.Element {
                 next.delete(lineNum)
                 return next
               })
+            const lineMatches = matchesByLine.get(lineNum) ?? EMPTY_MATCHES
+            const activeRangeForLine =
+              activeMatch && activeMatch.line === lineNum
+                ? { start: activeMatch.start, end: activeMatch.end }
+                : null
             return (
               <Fragment key={lineNum}>
                 <CodeLine
@@ -179,6 +234,8 @@ export function CodeLines(props: Props): JSX.Element {
                   selected={selection.isInRange(lineNum)}
                   drafted={draftedLines.has(lineNum)}
                   commentable={commentableSet.has(lineNum)}
+                  matches={lineMatches}
+                  activeMatch={activeRangeForLine}
                   aiFindingCount={visibleAi.length}
                   aiIsOpen={aiIsOpen}
                   onAiToggle={visibleAi.length > 0 ? toggleAi : undefined}
@@ -230,6 +287,24 @@ export function CodeLines(props: Props): JSX.Element {
                         : undefined
                     }
                     onSave={(body) => props.onSaveDraft(composer, body)}
+                    onSendToChat={
+                      onSendToChat
+                        ? (question) => {
+                            const lo = Math.min(composer.startLine, composer.endLine)
+                            const hi = Math.max(composer.startLine, composer.endLine)
+                            const lines = content.split('\n')
+                            const snippet = lines.slice(lo - 1, hi).join('\n')
+                            onSendToChat({
+                              file,
+                              startLine: lo,
+                              endLine: hi,
+                              snippet,
+                              question,
+                            })
+                            selection.clear()
+                          }
+                        : undefined
+                    }
                     onCancel={() => {
                       props.onCloseComposer()
                       selection.clear()
@@ -279,6 +354,10 @@ interface CodeLineProps {
   selected: boolean
   drafted: boolean
   commentable: boolean
+  /** Search match ranges within this line; drives `.search-match` highlighting. */
+  matches: LineMatchRange[]
+  /** When set, the single range that should render as `.search-match-active`. */
+  activeMatch: LineMatchRange | null
   /** How many non-dismissed AI findings exist on this line; 0 hides the ✨ icon. */
   aiFindingCount: number
   /** Whether the inline ✨ card(s) for this line are currently expanded. */
@@ -297,12 +376,15 @@ function CodeLine({
   selected,
   drafted,
   commentable,
+  matches,
+  activeMatch,
   aiFindingCount,
   aiIsOpen,
   onAiToggle,
   onGutterDown,
   onGutterEnter,
 }: CodeLineProps): JSX.Element {
+  const segments = highlightTokens(tokens, matches, activeMatch)
   return (
     <span
       data-line={lineNum}
@@ -355,9 +437,14 @@ function CodeLine({
         </span>
       </button>
       <span className="code-content min-w-0 flex-1 pr-3">
-        {tokens.map((tok, i) => (
-          <span key={i} style={{ color: tok.color, fontStyle: fontStyle(tok.fontStyle) }}>
-            {tok.content}
+        {segments.map((seg, i) => (
+          <span
+            key={i}
+            className={cn(seg.matched && 'search-match', seg.active && 'search-match-active')}
+            data-search-active={seg.active ? 'true' : undefined}
+            style={{ color: seg.color, fontStyle: fontStyle(seg.fontStyle) }}
+          >
+            {seg.content}
           </span>
         ))}
         {tokens.length === 0 && '\n'}
@@ -370,6 +457,21 @@ function fontStyle(mask: number | undefined): React.CSSProperties['fontStyle'] {
   return mask != null && (mask & 1) === 1 ? 'italic' : 'normal'
 }
 
+function bucketMatchesByLine(
+  matches: CodeSearchMatch[] | undefined,
+): Map<number, LineMatchRange[]> {
+  const out = new Map<number, LineMatchRange[]>()
+  if (!matches) return out
+  for (const m of matches) {
+    const list = out.get(m.line)
+    const range: LineMatchRange = { start: m.start, end: m.end }
+    if (list) list.push(range)
+    else out.set(m.line, [range])
+  }
+  return out
+}
+
 const EMPTY_FOCUS = new Set<number>()
 const EMPTY_STRING_SET = new Set<string>()
 const EMPTY_AI_MAP = new Map<number, Finding[]>()
+const EMPTY_MATCHES: LineMatchRange[] = []

@@ -4,14 +4,23 @@ import { api, ApiError, type TourResult, type TourStreamEvent } from '@/lib/api'
 
 export type TourState =
   | { kind: 'loading' }
+  | { kind: 'no-tour'; staleTour: TourResult | null }
   | { kind: 'generating'; events: TourStreamEvent[] }
   | { kind: 'ready'; tour: TourResult }
   | { kind: 'error'; message: string }
 
 interface UseTourResult {
   state: TourState
+  /** Kick off a generation from the no-tour state (or force one over a cached
+   *  tour). The hook auto-attaches to an in-flight generation on mount; this
+   *  is only needed for the "user clicks Generate" / "user clicks Regenerate"
+   *  paths. */
+  generate: () => void
   regenerate: () => void
   cancel: () => void
+  /** Promote the stale tour attached to the `no-tour` state into a `ready`
+   *  view without regenerating. No-op when no stale tour is on hand. */
+  viewStale: () => void
 }
 
 export function useTour(repo: string, prNumber: number): UseTourResult {
@@ -51,6 +60,15 @@ export function useTour(repo: string, prNumber: number): UseTourResult {
             setState({ kind: 'ready', tour: cached })
             return
           }
+          // No cached tour AND no in-flight job — stop here. Surface a
+          // "Generate tour" prompt instead of auto-burning tokens. The user
+          // explicitly asked to opt-in per PR. If a tour exists from a prior
+          // schema version, attach it so the screen can offer "View previous
+          // tour" alongside the regenerate CTA.
+          const stale = await tryGetStale(repo, prNumber)
+          if (ac.signal.aborted) return
+          setState({ kind: 'no-tour', staleTour: stale ?? null })
+          return
         }
 
         // Kick off (or attach to) a generation. The /generate/stream route
@@ -81,18 +99,38 @@ export function useTour(repo: string, prNumber: number): UseTourResult {
     setState({ kind: 'error', message: 'Generation cancelled' })
   }, [])
 
+  const viewStale = useCallback(() => {
+    setState((prev) => {
+      if (prev.kind !== 'no-tour' || !prev.staleTour) return prev
+      return { kind: 'ready', tour: prev.staleTour }
+    })
+  }, [])
+
   return {
     state,
+    generate: () => {
+      void load(true)
+    },
     regenerate: () => {
       void load(true)
     },
     cancel,
+    viewStale,
   }
 }
 
 async function tryGetCached(repo: string, prNumber: number): Promise<TourResult | undefined> {
   try {
     return await api.tours.get(repo, prNumber)
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return undefined
+    throw err
+  }
+}
+
+async function tryGetStale(repo: string, prNumber: number): Promise<TourResult | undefined> {
+  try {
+    return await api.tours.getStale(repo, prNumber)
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return undefined
     throw err

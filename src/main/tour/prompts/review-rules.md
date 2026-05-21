@@ -123,6 +123,151 @@ Emit a finding ONLY when you can cite a real file + line and explain what's wron
 - Deployment ordering: migration-first vs code-first; feature flags
 - Performance impact: table size, lock contention, replication lag
 
+## Step 3 — Backend critique (when backend files touched)
+
+The DESCRIPTIVE backend content — class / ER / sequence / flowchart / timing
+diagrams, OpenAPI YAML, request/response tables, permission summary, AM → SM
+mapping table — lives on the **tour itself** (per chapter; see the tour
+prompt's "Backend chapter diagrams" section). DO NOT mirror those tables or
+diagrams in findings. Findings are for **critique** only — gaps, drift,
+risks, anti-patterns.
+
+If the diff includes ANY of:
+
+- Server-side code (`src/server/`, `app/`, `internal/`, `pkg/`, `routes/`,
+  `controllers/`, `services/`, `repositories/`, `domain/`).
+- Migration files (`*.sql`, `migrations/*`, ORM model schema changes).
+- API specs (`*.proto`, `openapi.yaml`, `*.dto.*`, Zod / Pydantic schemas,
+  GraphQL `.graphql` / `.gql`).
+
+…then walk the critique items below IN ADDITION TO the per-lens work above.
+Skip the whole step cleanly if no backend files were touched.
+
+### B1. Permission gaps
+
+- Lens `performance-security`. One finding per gap, severity `major` or
+  `blocker` depending on the endpoint's sensitivity.
+- The tour's permission summary table is the descriptive view; here you only
+  flag what's missing or weaker than peer endpoints:
+  - Endpoint with no auth guard at all where peer endpoints in the same
+    module require auth.
+  - Authenticated-but-not-authorised endpoint where peer endpoints check role
+    / scope / ownership.
+  - Open IDOR risk: ID-in-path endpoint that doesn't check the caller owns
+    the resource.
+- Recognise auth patterns per stack (use these to identify what's missing):
+  - **Java / Spring**: `@PreAuthorize`, `@Secured`, `@RolesAllowed`,
+    `HttpSecurity` chains.
+  - **TS / Express / NestJS**: route middleware (`requireAuth`, `authGuard`),
+    NestJS `@UseGuards()`, `@Roles()`.
+  - **Python / FastAPI**: `Depends(get_current_user)`, `Security(...)`.
+  - **Python / Django**: `@permission_required`, `LoginRequiredMixin`,
+    DRF `permission_classes`.
+  - **Ruby / Rails**: `before_action :authenticate_user!`,
+    `cancancan` / `pundit` calls.
+  - **Go**: middleware chain on `http.Handler`, `mux.Use(...)`,
+    gin `r.Use(...)`.
+
+### B2. Null-safety / NPE checks
+
+- File-level findings, lens `business-logic`, severity usually `major`.
+- Trigger on: Optional-typed read without a check, `find*` / `get*` result
+  used without a null check, nullable DTO field access. Cite `file:line`.
+- Prioritise public-endpoint code paths (request → controller → service →
+  repository → response) over internal helpers.
+
+### B3. Test recommendations
+
+- One finding per changed controller / service method, lens `ux-dx`.
+- Detect the project's test framework by scanning the repo:
+  - `package.json` devDeps → Jest / Vitest / Mocha.
+  - `pyproject.toml` / `setup.cfg` → pytest / unittest.
+  - `pom.xml` / `build.gradle` → JUnit / Spock.
+  - `Gemfile` → RSpec / Minitest.
+  - `go.mod` → testing / Ginkgo.
+  - Fall back to "framework: unknown — providing plain-English cases".
+- Body structure:
+  - **Target file**: best-guess co-located path (e.g.
+    `src/services/foo.service.spec.ts` next to `foo.service.ts`).
+  - **Cases**: 4-6 scenarios (happy path, validation failure, auth failure,
+    edge case, error path).
+  - **Stub**: a fenced code block in the matching language with a
+    framework-matched test scaffold.
+
+### B4. Naming nomenclature
+
+- Per-file findings, lens `code-quality`.
+- Inference pass first (in your head, before emitting):
+  1. Open 3-5 sibling files in the touched directory via Read.
+  2. Note the dominant convention for class names, file names, suffix
+     patterns (`*Service` vs `*Manager`, `*Dto` vs `*DTO`), boolean prefixes
+     (`is*` / `has*`).
+  3. Treat 70% conformance OR 5+ files as "the convention".
+- Emit findings ONLY when a new name materially deviates. Avoid bikeshedding.
+
+### B5. Controller / function breakdown
+
+- Use the existing `prShape.complexityFlags` for size + nesting signals.
+  Backend-specific guidance:
+  - Controllers with > 8 endpoint methods → suggest a split by resource or
+    use-case. Concrete: which methods go where.
+  - Service methods > 60 lines OR > 4 levels of nesting → propose 2-4 named
+    private helper methods with a one-sentence description each.
+- Emit as `complexityFlags` (`kind: "function-length"` / `"nesting"`), NOT as
+  separate findings.
+
+### B6. AM → SM mapping issues
+
+- The descriptive mapping table lives on the tour. Here you only flag
+  **issues** with the mapping:
+  - API field present, no SM destination (likely dropped silently).
+  - SM field present, never populated from API (always defaulted).
+  - Lossy conversion: string → enum without validation, narrowing type cast,
+    truncation.
+  - Required API field mapped to an optional SM field (or vice versa) when
+    the conversion is unsafe.
+- One finding per issue, lens `business-logic`. Severity `blocker` if a
+  required field is silently dropped, otherwise `major`.
+
+### B7. Code similarity / duplication
+
+- Use `prShape.complexityFlags.duplication` for the structural flag.
+- ALSO scan the diff for blocks ≥ 8 lines that look ≥ 80% similar to blocks
+  elsewhere in the diff or in the existing repo. Cite both locations as
+  separate `file:line` anchors and suggest a named extraction.
+- Skip whitespace-only differences and identifier renames when comparing.
+
+### B8. Backend anti-patterns
+
+- Within the existing `code-quality` and `performance-security` lenses,
+  watch specifically for the backend anti-patterns below. Emit findings
+  (not just notes) when seen:
+  - N+1 queries inside loops or async maps.
+  - Singletons with mutable state — module-level globals, static fields.
+  - Synchronous I/O on a request path (blocking fetch / file read / long CPU
+    loop).
+  - Multi-statement write without a transaction boundary.
+  - Catch-all `except Exception: pass` / `catch (e) {}` swallowing errors
+    silently.
+  - Hard-coded secrets / DB URLs / API keys.
+  - Public field exposure of mutable collections (return type `List<T>` of
+    an internal field).
+  - Same query repeated in multiple places (cache or consolidate).
+
+### Severity reminder for backend findings
+
+- Endpoint without auth that should have one → **blocker**.
+- AM → SM mapping with silently-dropped required fields → **blocker**.
+- Schema migration without rollback / requires-downtime → **blocker**.
+- NPE on a public-endpoint path → **major**.
+- Missing tests / lossy mapping with non-required fields → **minor**.
+
+### Cap discipline
+
+- Backend findings count against the 60-cap. Prioritise blockers > major >
+  minor. If you'd exceed the cap, drop minor naming / similarity findings
+  first.
+
 ## Clickable identifiers — `symbols` map
 
 Whenever a finding's `body` or `suggestion` mentions a function, hook, variable, or type by name (inside backticks), populate the `symbols` map with that identifier → its definition's `{ file, line }`. The renderer makes the inline-code span clickable; the reviewer jumps straight to the definition.
@@ -132,16 +277,20 @@ Whenever a finding's `body` or `suggestion` mentions a function, hook, variable,
 - 10-20 entries per finding is plenty. Don't pad — only include identifiers the reviewer would benefit from jumping to. Library APIs like `useCallback`, `useState`, `Promise` should NOT be in the map.
 - If you don't know the definition line, omit the entry. Unmatched backticked tokens render as plain code; that's fine.
 
-## Inline diagrams — `mermaid` field
+## Inline diagrams — `diagrams[]` (preferred) and `mermaid` (legacy)
 
-When a finding's body describes a multi-step flow, state transition, retry / branching logic, or call sequence that's hard to follow as prose, attach a compact Mermaid diagram to clarify. The renderer surfaces it inline below the body.
+When a finding's body describes a multi-step flow, state transition, retry / branching logic, or call sequence that's hard to follow as prose, attach a compact Mermaid diagram to clarify. The renderer surfaces each diagram inline below the body.
 
-- Use `sequenceDiagram` for "A calls B calls C" or async / retry flows.
-- Use `flowchart TD` for branching control flow / decision trees.
-- Use `stateDiagram-v2` for state machines / lifecycle phases.
-- Keep diagrams compact — ≤15 nodes, ideally ≤8. They're meant to clarify, not dominate the comment.
-- Emit only when the diagram materially helps. Most findings don't need one. A 2-sentence finding never needs a diagram.
-- **Mermaid text hygiene** — Mermaid treats `;` as a top-level statement separator, so it CANNOT appear inside `note over X: …` text or any other free-text label (it breaks the parse). Use `,` or `<br/>` instead. Similarly avoid stray `++` / `--` inside labels (they are activation/deactivation syntax). Keep label text plain and short.
+- **Preferred:** populate `finding.diagrams[]` (typed array; cap 10). Each entry is `{ kind, mermaid }` where `kind` is one of: `sequence`, `flowchart`, `er`, `class`, `state`. Backend findings often attach 2–3 (e.g. class + ER + sequence).
+- **Legacy fallback:** `finding.mermaid` (single string) is still accepted but treated as a single sequence diagram. Use `diagrams[]` for everything new.
+- Diagram kind hints (only these kinds are valid for findings; tour-step kinds like `state` / `mockup` use structured payloads that the review schema does NOT accept):
+  - `sequence` (sequenceDiagram) — "A calls B calls C", async / retry flows.
+  - `flowchart` (flowchart TD) — branching control flow / decision trees. Also use this for state machines: emit `kind: 'flowchart'` with `stateDiagram-v2` as the first line of the mermaid source — mermaid auto-detects.
+  - `class` (classDiagram) — domain model with fields + relationships.
+  - `er` (erDiagram) — DB tables + FK relationships.
+- Keep each diagram compact — ≤15 nodes, ideally ≤8. They're meant to clarify, not dominate.
+- Emit a diagram only when it materially helps. A 2-sentence finding never needs one.
+- **Mermaid text hygiene** — Mermaid treats `;` as a top-level statement separator, so it CANNOT appear inside `note over X: …` text or any other free-text label (it breaks the parse). Use `,` or `<br/>` instead. Avoid stray `++` / `--` inside labels (activation/deactivation syntax). Keep label text plain and short. Wrap any label containing `()`, `[]`, `{}`, or `|` in double quotes (e.g. `A["foo()"]`).
 
 ## Rules of taste
 

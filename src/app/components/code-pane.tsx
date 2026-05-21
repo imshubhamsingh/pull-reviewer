@@ -1,13 +1,16 @@
 import { match } from 'ts-pattern'
-import { useState, type JSX, type ReactNode } from 'react'
+import { useMemo, useState, type JSX, type ReactNode } from 'react'
 import { FileCode, GitCompareArrows } from 'lucide-react'
 import type { Highlighter } from 'shiki'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useGutterSelection } from '@/app/hooks/use-gutter-selection'
 import { useHunks, commentableLineSet } from '@/app/hooks/use-hunks'
 import { useShiki } from '@/app/hooks/use-shiki'
+import { useCodeSearch, useCmdFListener } from '@/app/hooks/use-code-search'
 import { chooseSha, highlightWindow, inferLang } from '@/app/lib/code-utils'
+import { compileQuery, findLineMatches } from '@/app/lib/code-search'
 import { cn } from '@/app/lib/utils'
+import { CodeSearchOverlay } from '@/app/components/code-search-overlay'
 import { DiffPane } from '@/app/components/diff-pane'
 import { OtherSideDraftsBanner } from '@/app/components/other-side-drafts-banner'
 import type {
@@ -19,7 +22,7 @@ import type {
   TourStep,
 } from '@/lib/api'
 import { CodeHeader } from '@/app/components/code-header'
-import { CodeLines, type ComposerTarget } from '@/app/components/code-lines'
+import { CodeLines, type CodeSearchMatch, type ComposerTarget } from '@/app/components/code-lines'
 import { References } from '@/app/components/references'
 import type { QaThreads } from '@/app/hooks/use-qa-threads'
 import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
@@ -39,6 +42,19 @@ interface Props {
   aiFindings: ReviewFindingsState
   /** When the user clicks a finding in the right-pane, this is set to the finding id so the inline ✨ card auto-opens once CodePane mounts that file. */
   aiPendingExpand?: string | null
+  /** Set when the user clicked a ref / finding pointing at a specific
+   *  line; overrides the step's own anchor lines for scroll-to. Nonce
+   *  changes per click so repeat-clicks re-scroll. */
+  pendingScroll?: { line: number; nonce: number } | null
+  /** Pre-fill the right-pane chat composer with snippet + question; the
+   *  host pivots the right pane to Chat. Forwarded straight to CodeLines. */
+  onSendToChat?: (input: {
+    file: string
+    startLine: number
+    endLine: number
+    snippet: string
+    question: string
+  }) => void
   onJumpToRef: (ref: CodePointer) => void
   /** PR-wide Code/Diff selection lifted to tour-view so it persists across navigation. */
   viewMode: ViewMode
@@ -56,6 +72,8 @@ export function CodePane({
   qa,
   aiFindings,
   aiPendingExpand,
+  pendingScroll,
+  onSendToChat,
   onJumpToRef,
   viewMode,
   onViewModeChange,
@@ -111,6 +129,8 @@ export function CodePane({
         qa={qa}
         aiFindings={aiFindings}
         aiPendingExpand={aiPendingExpand}
+        pendingScroll={pendingScroll}
+        onSendToChat={onSendToChat}
         commentableLines={commentableSetForFile(hunks, code.file, code.side)}
         onJumpToRef={onJumpToRef}
         mode={viewMode}
@@ -202,6 +222,14 @@ interface ReadyPaneProps {
   qa: QaThreads
   aiFindings: ReviewFindingsState
   aiPendingExpand?: string | null
+  pendingScroll?: { line: number; nonce: number } | null
+  onSendToChat?: (input: {
+    file: string
+    startLine: number
+    endLine: number
+    snippet: string
+    question: string
+  }) => void
   commentableLines: Set<number>
   onJumpToRef: (ref: CodePointer) => void
   mode: ViewMode
@@ -221,6 +249,8 @@ function ReadyPane({
   qa,
   aiFindings,
   aiPendingExpand,
+  pendingScroll,
+  onSendToChat,
   commentableLines,
   onJumpToRef,
   mode,
@@ -234,6 +264,12 @@ function ReadyPane({
   const selection = useGutterSelection({
     onCommit: (range) => setComposer({ startLine: range.startLine, endLine: range.endLine }),
   })
+  const search = useCodeSearch()
+  useCmdFListener(search.open)
+  const searchMatches = useMemo(
+    () => buildContentMatches(snap.content ?? '', search.query, search.regex, search.caseSensitive),
+    [snap.content, search.query, search.regex, search.caseSensitive],
+  )
   // Only render drafts whose side matches the currently-shown side of the file.
   // A `before`-side draft anchored to baseLine 45 has nothing to do with line 45
   // of the head-side file — surfacing it inline would point at unrelated code.
@@ -254,7 +290,11 @@ function ReadyPane({
     )
   }
   if (!hl) return <EmptyPane>Loading highlighter…</EmptyPane>
-  const { focusLines, scrollTo, range } = highlightWindow(code)
+  const { focusLines, scrollTo: defaultScrollTo, range } = highlightWindow(code)
+  // A click on a finding / ref overrides the step's own anchor lines so the
+  // user lands on the line they clicked, not on the step's pinned range.
+  // `nonce` keys the override so repeat clicks re-scroll.
+  const scrollTo = pendingScroll?.line ?? defaultScrollTo
   const aiByLine = aiFindings.byLineMap(code.file)
   const dismissedFile = collectIds(aiByLine, (id) => aiFindings.isDismissed(id))
   const convertedFile = collectIds(aiByLine, (id) => aiFindings.isConverted(id))
@@ -282,52 +322,58 @@ function ReadyPane({
           }}
         />
       )}
-      <CodeLines
-        highlighter={hl}
-        content={snap.content}
-        lang={inferLang(code.file)}
-        file={code.file}
-        sha={sha}
-        focusLines={focusLines}
-        scrollTo={scrollTo}
-        range={range}
-        drafts={fileDrafts}
-        composer={composer}
-        selection={selection}
-        commentableLines={commentableLines}
-        aiFindingsByLine={aiByLine}
-        aiDismissed={dismissedFile}
-        aiConverted={convertedFile}
-        aiPendingExpand={aiPendingExpand}
-        onAiDismiss={aiFindings.dismiss}
-        onAiConvert={(finding) => convertFindingToDraft(finding, drafts, aiFindings, reviewSide)}
-        onAiJumpSymbol={(loc: SymbolLocation) =>
-          onJumpToRef({ file: loc.file, lineStart: loc.line })
-        }
-        onCloseComposer={() => {
-          setComposer(null)
-          selection.clear()
-        }}
-        onAskAiStream={(input, onEvent) =>
-          qa.askStream({ ...input, chapterId: chapterId ?? null }, { onEvent })
-        }
-        onSaveDraft={async (target, body) => {
-          const lo = Math.min(target.startLine, target.endLine)
-          const hi = Math.max(target.startLine, target.endLine)
-          await drafts.add({
-            file: code.file,
-            line: hi,
-            startLine: lo === hi ? null : lo,
-            side: reviewSide,
-            body,
-          })
-          setComposer(null)
-          selection.clear()
-        }}
-        onUpdateDraft={drafts.update}
-        onReanchorDraft={drafts.reanchor}
-        onDeleteDraft={drafts.remove}
-      />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <CodeSearchOverlay search={search} matchCount={searchMatches.length} />
+        <CodeLines
+          highlighter={hl}
+          content={snap.content}
+          lang={inferLang(code.file)}
+          file={code.file}
+          sha={sha}
+          focusLines={focusLines}
+          scrollTo={scrollTo}
+          range={range}
+          drafts={fileDrafts}
+          composer={composer}
+          selection={selection}
+          commentableLines={commentableLines}
+          searchMatches={searchMatches}
+          searchActiveIndex={search.activeIndex}
+          aiFindingsByLine={aiByLine}
+          aiDismissed={dismissedFile}
+          aiConverted={convertedFile}
+          aiPendingExpand={aiPendingExpand}
+          onAiDismiss={aiFindings.dismiss}
+          onAiConvert={(finding) => convertFindingToDraft(finding, drafts, aiFindings, reviewSide)}
+          onAiJumpSymbol={(loc: SymbolLocation) =>
+            onJumpToRef({ file: loc.file, lineStart: loc.line })
+          }
+          onCloseComposer={() => {
+            setComposer(null)
+            selection.clear()
+          }}
+          onAskAiStream={(input, onEvent) =>
+            qa.askStream({ ...input, chapterId: chapterId ?? null }, { onEvent })
+          }
+          onSendToChat={onSendToChat}
+          onSaveDraft={async (target, body) => {
+            const lo = Math.min(target.startLine, target.endLine)
+            const hi = Math.max(target.startLine, target.endLine)
+            await drafts.add({
+              file: code.file,
+              line: hi,
+              startLine: lo === hi ? null : lo,
+              side: reviewSide,
+              body,
+            })
+            setComposer(null)
+            selection.clear()
+          }}
+          onUpdateDraft={drafts.update}
+          onReanchorDraft={drafts.reanchor}
+          onDeleteDraft={drafts.remove}
+        />
+      </div>
       {step.references?.length ? (
         <References
           refs={step.references}
@@ -402,6 +448,24 @@ function buildDraftBodyFromFinding(finding: Finding): string {
   const parts = [finding.body]
   if (finding.suggestion) parts.push(`**Suggestion:** ${finding.suggestion}`)
   return parts.join('\n\n')
+}
+
+function buildContentMatches(
+  content: string,
+  query: string,
+  regex: boolean,
+  caseSensitive: boolean,
+): CodeSearchMatch[] {
+  const re = compileQuery(query, { regex, caseSensitive })
+  if (!re) return []
+  const lines = content.split('\n')
+  const out: CodeSearchMatch[] = []
+  for (let i = 0; i < lines.length; i++) {
+    for (const r of findLineMatches(lines[i]!, re)) {
+      out.push({ line: i + 1, start: r.start, end: r.end })
+    }
+  }
+  return out
 }
 
 function OmittedPane({

@@ -42,6 +42,11 @@
   :root {
     color-scheme: dark;
   }
+  * {
+    @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: gray transparent;
+  }
   html,
   body,
   #root {
@@ -138,6 +143,35 @@
   color: var(--color-text-primary);
 }
 
+/* GFM tables — `marked` emits `<table>` for pipe-tables but without styling
+   they render as bare column-aligned text. Backend tour content (permission
+   summary, request/response shapes, AM→SM map) leans heavily on tables, so
+   they need visible cells + headers. */
+.markdown :where(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.65em 0;
+  font-size: 0.92em;
+  display: block;
+  overflow-x: auto;
+}
+.markdown :where(thead) {
+  background-color: var(--color-surface);
+}
+.markdown :where(th, td) {
+  border: 1px solid var(--color-border);
+  padding: 0.4em 0.6em;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown :where(th) {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.markdown :where(tbody tr:nth-child(even)) {
+  background-color: color-mix(in srgb, var(--color-surface) 40%, transparent);
+}
+
 /* Code pane: tokenized line rendering. Theme supplies colors via inline style
    on each token; we own the layout (gutter, focus, highlight, comment slots).
    container-type makes the block a sizing reference for inline comment cards
@@ -207,6 +241,32 @@
 }
 .diff-row.line-commentable .code-gutter > span:first-child {
   color: hsl(142 65% 55%);
+}
+
+/* Cmd-F overlay search highlights. `.search-match` paints every hit;
+   `.search-match-active` marks the one that scrolls into view; the brief
+   `.search-match-active-flash` adds a one-shot pulse so the user can
+   spot the jump target. */
+.search-match {
+  background-color: hsl(45 90% 50% / 0.32);
+  border-radius: 2px;
+}
+.search-match-active {
+  background-color: hsl(45 95% 55% / 0.6);
+  box-shadow: 0 0 0 1px hsl(45 95% 60% / 0.7);
+}
+@keyframes search-match-flash {
+  0% {
+    background-color: hsl(45 95% 70%);
+    box-shadow: 0 0 0 2px hsl(45 95% 70%);
+  }
+  100% {
+    background-color: hsl(45 95% 55% / 0.6);
+    box-shadow: 0 0 0 1px hsl(45 95% 60% / 0.7);
+  }
+}
+.search-match-active-flash {
+  animation: search-match-flash 0.6s ease-out;
 }
 
 /* Diagram pane: the SVG fills a wrapper whose explicit width/height is

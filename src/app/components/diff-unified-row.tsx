@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { match } from 'ts-pattern'
 import type { useShiki } from '@/app/hooks/use-shiki'
 import type { DiffLine } from '@/app/lib/diff-lines'
+import type { LineMatchRange } from '@/app/lib/code-search'
 import { cn } from '@/app/lib/utils'
 import { CodeContent, DIFF_STYLE } from '@/app/components/diff-helpers'
 import { DiffGutterButton, DiffGutterStatic } from '@/app/components/diff-gutter'
@@ -15,15 +16,21 @@ import type { DiffSurface, ReviewSide } from '@/app/components/diff-surface'
  * passed; the other side renders as a static label.
  */
 export function DiffUnifiedRow({
+  rowIndex,
   row,
   hl,
   file,
   surface,
+  matches,
+  activeMatch,
 }: {
+  rowIndex: number
   row: DiffLine
   hl: ReturnType<typeof useShiki>
   file: string
   surface: DiffSurface | null
+  matches?: LineMatchRange[]
+  activeMatch?: LineMatchRange | null
 }): JSX.Element {
   const { bg: diffBg, marker, markerColor } = styleForKind(row.kind)
   const reviewSide = sideOfUnifiedRow(row)
@@ -39,6 +46,7 @@ export function DiffUnifiedRow({
 
   return (
     <div
+      data-diff-row={rowIndex}
       className={cn(
         'diff-row group flex leading-[1.55]',
         commentable && 'line-commentable',
@@ -65,7 +73,13 @@ export function DiffUnifiedRow({
         {marker}
       </span>
       <span className="pr-3 whitespace-pre">
-        <CodeContent content={row.content} hl={hl} file={file} />
+        <CodeContent
+          content={row.content}
+          hl={hl}
+          file={file}
+          matches={matches}
+          activeMatch={activeMatch}
+        />
       </span>
     </div>
   )

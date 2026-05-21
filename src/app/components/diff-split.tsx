@@ -2,10 +2,16 @@ import { useMemo, useRef, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import type { useShiki } from '@/app/hooks/use-shiki'
 import type { DiffLine } from '@/app/lib/diff-lines'
+import type { DiffSearchMatch, LineMatchRange } from '@/app/lib/code-search'
 import { DiffCommentBlock } from '@/app/components/diff-comment-block'
 import { DiffSideRow } from '@/app/components/diff-side-row'
 import { anchorsForSplitRow, interleave, type Block } from '@/app/components/diff-blocks'
 import type { DiffSurface } from '@/app/components/diff-surface'
+
+export interface DiffSearchPayload {
+  matches: DiffSearchMatch[]
+  activeIndex: number
+}
 
 /**
  * Two parallel columns (base / head) chunked into bands. Each "rows" band is
@@ -24,23 +30,29 @@ export function DiffColumns({
   rows,
   hl,
   file,
-  children,
   surface,
+  search,
 }: {
   rows: DiffLine[]
   hl: ReturnType<typeof useShiki>
   file: string
-  children: React.ReactNode
   surface?: DiffSurface | null
+  search?: DiffSearchPayload
 }): JSX.Element {
   const bands = useMemo(() => chunkIntoBands(buildBlocks(rows, surface)), [rows, surface])
   return (
     <div className="bg-bg min-h-0 flex-1 overflow-y-auto font-mono text-xs">
-      {children}
       {bands.map((band, bi) =>
         match(band)
           .with({ kind: 'rows' }, (b) => (
-            <TwoColumnBand key={bi} rows={b.rows} hl={hl} file={file} surface={surface ?? null} />
+            <TwoColumnBand
+              key={bi}
+              rows={b.rows}
+              hl={hl}
+              file={file}
+              surface={surface ?? null}
+              search={search}
+            />
           ))
           .with({ kind: 'full' }, (b) =>
             surface ? (
@@ -115,11 +127,13 @@ function TwoColumnBand({
   hl,
   file,
   surface,
+  search,
 }: {
   rows: Array<{ row: DiffLine; index: number }>
   hl: ReturnType<typeof useShiki>
   file: string
   surface: DiffSurface | null
+  search: DiffSearchPayload | undefined
 }): JSX.Element {
   const leftRef = useRef<HTMLDivElement>(null)
   const rightRef = useRef<HTMLDivElement>(null)
@@ -144,7 +158,17 @@ function TwoColumnBand({
         className="border-border min-w-0 flex-1 overflow-x-auto border-r"
       >
         {rows.map(({ row, index }) => (
-          <DiffSideRow key={index} column="base" row={row} hl={hl} file={file} surface={surface} />
+          <DiffSideRow
+            key={index}
+            column="base"
+            rowIndex={index}
+            row={row}
+            hl={hl}
+            file={file}
+            surface={surface}
+            matches={cellMatches(search, index, 'base')}
+            activeMatch={cellActiveMatch(search, index, 'base')}
+          />
         ))}
       </div>
       <div
@@ -153,9 +177,45 @@ function TwoColumnBand({
         className="min-w-0 flex-1 overflow-x-auto"
       >
         {rows.map(({ row, index }) => (
-          <DiffSideRow key={index} column="head" row={row} hl={hl} file={file} surface={surface} />
+          <DiffSideRow
+            key={index}
+            column="head"
+            rowIndex={index}
+            row={row}
+            hl={hl}
+            file={file}
+            surface={surface}
+            matches={cellMatches(search, index, 'head')}
+            activeMatch={cellActiveMatch(search, index, 'head')}
+          />
         ))}
       </div>
     </div>
   )
+}
+
+function cellMatches(
+  search: DiffSearchPayload | undefined,
+  rowIndex: number,
+  side: 'base' | 'head',
+): LineMatchRange[] | undefined {
+  if (!search || search.matches.length === 0) return undefined
+  const out: LineMatchRange[] = []
+  for (const m of search.matches) {
+    if (m.rowIndex === rowIndex && m.sides.includes(side)) {
+      out.push({ start: m.start, end: m.end })
+    }
+  }
+  return out.length === 0 ? undefined : out
+}
+
+function cellActiveMatch(
+  search: DiffSearchPayload | undefined,
+  rowIndex: number,
+  side: 'base' | 'head',
+): LineMatchRange | null {
+  if (!search || search.activeIndex < 0) return null
+  const m = search.matches[search.activeIndex]
+  if (!m || m.rowIndex !== rowIndex || !m.sides.includes(side)) return null
+  return { start: m.start, end: m.end }
 }

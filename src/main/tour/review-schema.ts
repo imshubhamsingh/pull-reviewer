@@ -6,6 +6,17 @@ import { z } from 'zod'
 const REVIEW_SEVERITIES = ['minor', 'major', 'blocker'] as const
 const REVIEW_CODE_SIDES = ['before', 'after', 'diff'] as const
 
+// Narrowed subset of tour-schema's `DiagramSchema` — review findings only
+// emit mermaid-string kinds (the structured `state` / `mockup` variants are
+// tour-step-only). Inlined locally to avoid a circular import with
+// tour-schema. If `tour-schema` ever changes its mermaid kinds, mirror them
+// here.
+const FINDING_DIAGRAM_KINDS = ['sequence', 'flowchart', 'er', 'class', 'fileGraph'] as const
+const FindingDiagramSchema = z.object({
+  kind: z.enum(FINDING_DIAGRAM_KINDS),
+  mermaid: z.string().min(1).max(20_000),
+})
+
 /**
  * Review pass output — the structured findings produced by the dedicated AI
  * review CLI run that follows tour generation. The model triages the diff to
@@ -51,13 +62,28 @@ const FindingSchema = z.object({
   id: z.string().min(1).max(160),
   lens: z.enum(LENSES),
   severity: z.enum(REVIEW_SEVERITIES),
-  body: z.string().min(1).max(2_000),
+  // Bumped from 2_000 → 6_000 to fit the new backend findings whose bodies
+  // carry markdown tables (request/response, permission map, AM→SM map) +
+  // OpenAPI YAML fences. Typical frontend findings still come in under 1k.
+  body: z.string().min(1).max(6_000),
   code: FindingCodeSchema.optional(),
-  suggestion: z.string().max(2_000).optional(),
+  suggestion: z.string().max(6_000).optional(),
   /** Optional click-to-jump map for identifiers mentioned in the body. */
   symbols: z.record(z.string().min(1), SymbolLocationSchema).optional(),
-  /** Optional inline diagram source rendered beneath the body. */
+  /**
+   * Legacy single-diagram field. New emissions use `diagrams[]`; this
+   * remains for back-compat with stored reviews and is rendered as a
+   * single sequence diagram via the `diagramsForFinding` helper.
+   */
   mermaid: z.string().min(1).max(4_000).optional(),
+  /**
+   * Structured diagrams attached to the finding — sequence, flowchart, er,
+   * class, fileGraph. Cap 10 so a backend finding can carry class + ER +
+   * sequence + AM→SM map together. Renderer prefers this over `mermaid`
+   * when both are set. State machines ride as `kind: 'flowchart'` with
+   * `stateDiagram-v2` as the first line of the source — mermaid auto-detects.
+   */
+  diagrams: z.array(FindingDiagramSchema).max(10).optional(),
 })
 
 const SkipReasonSchema = z.object({
@@ -122,6 +148,7 @@ export const ReviewSchema = z.object({
 })
 
 export type FindingCode = z.infer<typeof FindingCodeSchema>
+export type FindingDiagram = z.infer<typeof FindingDiagramSchema>
 export type Finding = z.infer<typeof FindingSchema>
 export type SkipReason = z.infer<typeof SkipReasonSchema>
 export type ComplexityFlag = z.infer<typeof ComplexityFlagSchema>

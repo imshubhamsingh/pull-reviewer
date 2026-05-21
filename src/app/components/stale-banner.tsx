@@ -18,12 +18,13 @@ export function StaleBanner({ generatedFor, currentHead, onRegenerate }: Props):
         <span aria-hidden className="mr-1">
           ⓘ
         </span>
-        Tour was generated for <Sha>{generatedFor}</Sha>. PR head is now <Sha>{currentHead}</Sha>.
+        This tour is for <Sha>{generatedFor}</Sha> — the PR has moved on to <Sha>{currentHead}</Sha>
+        . Reading the old tour is still useful; regenerate when ready.
       </p>
       <button
         type="button"
         onClick={onRegenerate}
-        className="bg-interactive-secondary hover:bg-interactive-secondary-hover text-text-primary rounded-sm px-3 py-1 text-xs transition-colors"
+        className="bg-interactive-secondary hover:bg-interactive-secondary-hover text-text-primary shrink-0 rounded-sm px-3 py-1 text-xs transition-colors"
       >
         Regenerate
       </button>

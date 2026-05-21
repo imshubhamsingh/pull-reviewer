@@ -3,6 +3,7 @@ import { useEffect, useState, type JSX } from 'react'
 import { cn } from '@/app/lib/utils'
 import { MarkdownView } from '@/app/components/markdown-view'
 import { sanitizeMermaid } from '@/app/components/mermaid-sanitize'
+import { captionForDiagram, diagramsForFinding } from '@/app/lib/finding-diagrams'
 import type { Finding, SymbolLocation } from '@/lib/api'
 
 /**
@@ -20,6 +21,7 @@ interface Props {
 
 export function FindingBody({ finding, onJumpToSymbol, className }: Props): JSX.Element {
   const symbols = finding.symbols
+  const diagrams = diagramsForFinding(finding)
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       <MarkdownView
@@ -36,7 +38,14 @@ export function FindingBody({ finding, onJumpToSymbol, className }: Props): JSX.
           onJumpToSymbol={onJumpToSymbol}
         />
       )}
-      {finding.mermaid && <FindingMermaid id={`finding-${finding.id}`} source={finding.mermaid} />}
+      {diagrams.map((diagram, i) => (
+        <figure key={i} className="my-1">
+          <figcaption className="text-text-muted mb-0.5 text-[10px] tracking-wider uppercase">
+            {captionForDiagram(diagram)}
+          </figcaption>
+          <FindingMermaid id={`finding-${finding.id}-${i}`} source={diagram.mermaid} />
+        </figure>
+      ))}
     </div>
   )
 }

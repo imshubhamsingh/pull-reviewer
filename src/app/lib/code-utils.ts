@@ -67,27 +67,8 @@ function computeRange(code: CodePointer, scrollTo: number | undefined): Highligh
   return { start: Math.max(1, start - ctx), end: end + ctx }
 }
 
-/** Map a file path's extension to a shiki language id. Falls back to plaintext. */
-export function inferLang(file: string): string {
-  const ext = (file.split('.').pop() ?? '').toLowerCase()
-  return EXT_TO_LANG[ext] ?? 'plaintext'
-}
-
-const EXT_TO_LANG: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'tsx',
-  js: 'javascript',
-  jsx: 'jsx',
-  json: 'json',
-  css: 'css',
-  html: 'html',
-  md: 'markdown',
-  py: 'python',
-  rs: 'rust',
-  go: 'go',
-  sql: 'sql',
-  yml: 'yaml',
-  yaml: 'yaml',
-  sh: 'bash',
-  bash: 'bash',
-}
+// `inferLang` lives in `language-registry.ts` now — re-exported here so
+// existing callers (`code-pane.tsx`, `diff-helpers.tsx`, `standalone-code-view.tsx`)
+// keep working without an import rewrite. New code should import from
+// `@/app/lib/language-registry` directly.
+export { inferLang } from '@/app/lib/language-registry'

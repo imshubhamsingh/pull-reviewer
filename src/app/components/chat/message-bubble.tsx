@@ -1,6 +1,6 @@
 import { MessageSquareQuote, X } from 'lucide-react'
 import { marked } from 'marked'
-import { useMemo, type JSX } from 'react'
+import { useEffect, useMemo, useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import { RefChips } from '@/app/components/chat/ref-chips'
 import { ChatDiagram } from '@/app/components/chat/chat-diagram'
@@ -103,11 +103,7 @@ function Body({ message }: { message: PrChatMessage }): JSX.Element {
   }, [message.body])
 
   if (message.status === 'streaming' && !message.body) {
-    return (
-      <div className="border-border bg-surface text-text-muted rounded-md border px-3 py-2 text-sm italic">
-        thinking…
-      </div>
-    )
+    return <ThinkingPlaceholder createdAt={message.createdAt} />
   }
 
   return (
@@ -140,4 +136,35 @@ function statusSuffix(status: PrChatMessage['status']): string {
     .with('error', () => ' · error')
     .with('complete', () => '')
     .exhaustive()
+}
+
+/**
+ * Placeholder shown while a streaming assistant turn has produced no text
+ * yet. Shows elapsed seconds since the placeholder was created so the user
+ * can tell "slow CLI start" from "subprocess hung". After 20s the hint
+ * upgrades to remind them they can cancel and retry.
+ */
+function ThinkingPlaceholder({ createdAt }: { createdAt: string }): JSX.Element {
+  const startMs = useMemo(() => new Date(createdAt).getTime(), [createdAt])
+  const [elapsed, setElapsed] = useState(() =>
+    Math.max(0, Math.floor((Date.now() - startMs) / 1000)),
+  )
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [startMs])
+  const stuck = elapsed >= 20
+  return (
+    <div className="border-border bg-surface text-text-muted rounded-md border px-3 py-2 text-sm italic">
+      thinking… <span className="text-text-muted/70 not-italic tabular-nums">({elapsed}s)</span>
+      {stuck && (
+        <span className="text-text-muted/70 not-italic">
+          {' '}
+          · taking longer than usual — try Cancel and retry if it's stuck.
+        </span>
+      )}
+    </div>
+  )
 }

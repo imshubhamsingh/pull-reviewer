@@ -6,7 +6,7 @@ import type { Tour } from '@/main/tour/tour-schema'
 import { Service } from '@/main/service'
 
 /** Bump when the persisted shape changes incompatibly; rows below the current value are treated as stale. */
-const CURRENT_SCHEMA_VERSION = 3
+const CURRENT_SCHEMA_VERSION = 7
 
 export interface TourRecord {
   prId: string // "{repo}#{prNumber}"
@@ -72,6 +72,22 @@ export class TourStore extends Service {
     ])
     if (!row || row.schema_version < CURRENT_SCHEMA_VERSION || !row.chapters_json) return undefined
     this.touchAccessed(id)
+    return rowToRecord(row)
+  }
+
+  /**
+   * Returns any stored tour for this PR — including rows generated against an
+   * older `CURRENT_SCHEMA_VERSION`. Powers the "View previous tour" affordance
+   * on the No-tour screen so a schema-version bump doesn't visibly orphan
+   * existing work. Caller is responsible for treating the payload as a
+   * snapshot (no live head probe, no last-accessed bump).
+   */
+  getAny(repo: string, prNumber: number): TourRecord | undefined {
+    const id = prId(repo, prNumber)
+    const row = this.db.selectOne<Row>(/* sql */ `SELECT ${COLUMNS} FROM tours WHERE pr_id = ?`, [
+      id,
+    ])
+    if (!row || !row.chapters_json) return undefined
     return rowToRecord(row)
   }
 

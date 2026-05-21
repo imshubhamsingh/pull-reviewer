@@ -40,6 +40,22 @@ export class TourRouter extends Service {
       return c.json(cached)
     })
 
+    // GET /:owner/:name/:prNumber/stale → any stored tour, including rows from
+    // an older `CURRENT_SCHEMA_VERSION`. Powers the "View previous tour"
+    // button on the No-tour screen so a schema bump doesn't visibly orphan
+    // previously-generated tours. 404 if nothing is stored at all.
+    app.get('/:repoOwner/:repoName/:prNumber/stale', (c) => {
+      const parsed = parseParams(
+        c.req.param('repoOwner'),
+        c.req.param('repoName'),
+        c.req.param('prNumber'),
+      )
+      if (!parsed) return c.json({ error: 'invalid pr number' }, 400)
+      const stale = this.tours.getStale(parsed.repo, parsed.prNumber)
+      if (!stale) return c.json({ error: 'no stored tour for this PR' }, 404)
+      return c.json(stale)
+    })
+
     // POST /:owner/:name/:prNumber/generate → run synchronously (no streaming).
     // Kept for back-compat; new code paths should prefer the job routes below.
     app.post('/:repoOwner/:repoName/:prNumber/generate', async (c) => {

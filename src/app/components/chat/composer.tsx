@@ -5,6 +5,11 @@ interface Props {
   onSend: (message: string) => void | Promise<void>
   onCancel: () => void
   placeholder?: string
+  /** External pre-fill payload — bump `nonce` to force the textarea to be
+   *  re-seeded (e.g. when the user clicks "💬 Chat" on a line range). The
+   *  nonce-keyed effect lets repeat clicks re-prefill even when the text is
+   *  identical to the previous value. */
+  prefill?: { text: string; nonce: number }
 }
 
 const MAX_ROWS = 8
@@ -17,9 +22,26 @@ const MAX_ROWS = 8
  * Plain Enter inserts a newline so users can compose multi-paragraph
  * questions without surprises. Send button is the explicit affordance.
  */
-export function Composer({ busy, onSend, onCancel, placeholder }: Props): JSX.Element {
+export function Composer({ busy, onSend, onCancel, placeholder, prefill }: Props): JSX.Element {
   const [value, setValue] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-send the prefill payload (e.g. user clicked "Send to chat" on a
+  // line range). The user already typed their question in the LineComposer
+  // Chat tab, so a second Send click is just friction. If a stream is
+  // already in flight (`busy`), fall back to pre-filling the textarea so
+  // we don't drop the message — the user can hit Send themselves once
+  // the previous turn settles. Keyed on nonce so repeat clicks re-fire.
+  useEffect(() => {
+    if (!prefill) return
+    if (busy) {
+      setValue(prefill.text)
+      ref.current?.focus()
+      return
+    }
+    setValue('')
+    void onSend(prefill.text)
+  }, [prefill?.nonce])
 
   // Auto-grow up to MAX_ROWS by toggling rows via scrollHeight.
   useEffect(() => {

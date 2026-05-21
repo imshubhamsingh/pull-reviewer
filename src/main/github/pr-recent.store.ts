@@ -99,6 +99,49 @@ export class PrRecentStore extends Service {
     )
   }
 
+  /**
+   * Refresh-only upsert: updates the cached snapshot's mutable fields
+   * (state, title, decision, etc.) WITHOUT bumping `last_opened_at`, so the
+   * Recents ordering stays stable when we re-fetch live state from GitHub.
+   * No-op if the row doesn't exist (don't manufacture rows during refresh).
+   */
+  touchKeepOpenedAt(pr: PullRequestSummary): void {
+    this.db.update(
+      /* sql */ `
+        UPDATE pr_recents SET
+          pr_id           = @prId,
+          title           = @title,
+          url             = @url,
+          author          = @author,
+          is_draft        = @isDraft,
+          state           = @state,
+          pr_created_at   = @prCreatedAt,
+          pr_updated_at   = @prUpdatedAt,
+          additions       = @additions,
+          deletions       = @deletions,
+          changed_files   = @changedFiles,
+          review_decision = @reviewDecision
+        WHERE repo = @repo AND pr_number = @prNumber
+      `,
+      {
+        repo: pr.repo,
+        prNumber: pr.number,
+        prId: pr.id,
+        title: pr.title,
+        url: pr.url,
+        author: pr.author,
+        isDraft: pr.isDraft ? 1 : 0,
+        state: pr.state,
+        prCreatedAt: pr.createdAt,
+        prUpdatedAt: pr.updatedAt,
+        additions: pr.additions,
+        deletions: pr.deletions,
+        changedFiles: pr.changedFiles,
+        reviewDecision: pr.reviewDecision,
+      },
+    )
+  }
+
   remove(repo: string, prNumber: number): boolean {
     const { changes } = this.db.delete(
       /* sql */ `DELETE FROM pr_recents WHERE repo = ? AND pr_number = ?`,

@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import type { useShiki } from '@/app/hooks/use-shiki'
 import type { DiffLine } from '@/app/lib/diff-lines'
+import type { LineMatchRange } from '@/app/lib/code-search'
 import { cn } from '@/app/lib/utils'
 import { CodeContent, DIFF_STYLE } from '@/app/components/diff-helpers'
 import { DiffGutterButton, DiffGutterStatic } from '@/app/components/diff-gutter'
@@ -14,20 +15,28 @@ import type { DiffSurface, ReviewSide } from '@/app/components/diff-surface'
  */
 export function DiffSideRow({
   column,
+  rowIndex,
   row,
   hl,
   file,
   surface,
+  matches,
+  activeMatch,
 }: {
   column: 'base' | 'head'
+  rowIndex: number
   row: DiffLine
   hl: ReturnType<typeof useShiki>
   file: string
   surface: DiffSurface | null
+  matches?: LineMatchRange[]
+  activeMatch?: LineMatchRange | null
 }): JSX.Element {
   const view = computeRowView(column, row, surface)
   return (
     <div
+      data-diff-row={rowIndex}
+      data-diff-side={column}
       className={cn(
         'diff-row group flex leading-[1.55]',
         view.commentable && 'line-commentable',
@@ -47,7 +56,17 @@ export function DiffSideRow({
         {view.shown ? view.marker : ''}
       </span>
       <span className="pr-3 whitespace-pre">
-        {view.shown ? <CodeContent content={row.content} hl={hl} file={file} /> : ' '}
+        {view.shown ? (
+          <CodeContent
+            content={row.content}
+            hl={hl}
+            file={file}
+            matches={matches}
+            activeMatch={activeMatch}
+          />
+        ) : (
+          ' '
+        )}
       </span>
     </div>
   )

@@ -97,9 +97,13 @@ const CritiqueSuggestionSchema = z.object({
   findingId: z.string().optional(),
 })
 
+// Both buckets default to `[]` so the LLM can emit one and skip the other —
+// previously omitting `suggestions` (a common occurrence when the model only
+// flags issues) tripped the whole tour parse and forced an expensive retry.
+// `.default([])` also handles the inverse: `issues` empty / absent.
 const ChapterCritiqueSchema = z.object({
-  issues: z.array(CritiqueIssueSchema).max(10),
-  suggestions: z.array(CritiqueSuggestionSchema).max(10),
+  issues: z.array(CritiqueIssueSchema).max(10).default([]),
+  suggestions: z.array(CritiqueSuggestionSchema).max(10).default([]),
 })
 
 const TourChapterSchema = z.object({

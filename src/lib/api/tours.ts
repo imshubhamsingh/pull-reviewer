@@ -55,6 +55,14 @@ export const tours = {
   /** Returns the cached tour, or rejects with ApiError(404) if none exists. Never runs the model. */
   get: (repo: string, prNumber: number) => http.get<TourResult>(`/api/tours/${repo}/${prNumber}`),
   /**
+   * Returns any stored tour for this PR — including ones generated against an
+   * older `CURRENT_SCHEMA_VERSION`. Rejects with ApiError(404) if nothing is
+   * stored at all. Used by the No-tour screen to offer a "View previous tour"
+   * affordance so a schema bump doesn't visibly orphan existing work.
+   */
+  getStale: (repo: string, prNumber: number) =>
+    http.get<TourResult>(`/api/tours/${repo}/${prNumber}/stale`),
+  /**
    * If a cached tour exists, returns it (possibly stale — check `currentHeadRefOid !== headRefOid`).
    * Otherwise runs the model. With `force: true`, bypasses the cache and always runs the model.
    */

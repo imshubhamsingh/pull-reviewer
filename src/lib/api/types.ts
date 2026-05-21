@@ -317,8 +317,18 @@ export interface Finding {
   suggestion?: string
   /** Click-to-jump symbol table — keys match `` `inline-code` `` spans in body/suggestion. */
   symbols?: Record<string, SymbolLocation>
-  /** Optional inline Mermaid diagram source for findings that benefit from a visual. */
+  /** Legacy single Mermaid diagram source — back-compat for stored reviews. */
   mermaid?: string
+  /** Structured diagrams attached to the finding. Mermaid-string kinds only
+   *  (the structured `state` / `mockup` variants of `Diagram` are reserved
+   *  for tour steps). Renderer prefers this over `mermaid` when both are
+   *  set. Cap 10 — set in the schema. */
+  diagrams?: FindingDiagram[]
+}
+
+export interface FindingDiagram {
+  kind: 'sequence' | 'flowchart' | 'er' | 'class' | 'fileGraph'
+  mermaid: string
 }
 
 export interface SkipReason {

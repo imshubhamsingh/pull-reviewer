@@ -53,8 +53,19 @@ type Finding = {
   }
   suggestion?: string                                       // optional "here's how to fix it" — concrete, references real code
   symbols?:    Record<string, { file: string, line: number }>  // click-to-jump map: identifier → definition; keys must match backticked tokens in body/suggestion
-  mermaid?:    string                                       // optional inline Mermaid diagram (sequence/flowchart/stateDiagram-v2) when the finding describes a multi-step flow
+  mermaid?:    string                                       // LEGACY: single Mermaid diagram source. Prefer `diagrams[]`.
+  diagrams?:   Diagram[]                                    // structured diagrams (cap 10); preferred over `mermaid`. Backend findings often attach class + ER + sequence.
 }
+
+type Diagram =
+  | { kind: 'sequence',  mermaid: string }
+  | { kind: 'flowchart', mermaid: string }
+  | { kind: 'er',        mermaid: string }
+  | { kind: 'class',     mermaid: string }
+// State machines: use kind: 'flowchart' with `stateDiagram-v2` as the first line
+// of the mermaid source. Mermaid auto-detects the type from the source. Do NOT
+// emit kind: 'state' / 'mockup' for findings — those expect structured payloads
+// only used by tour steps.
 ```
 
 ## Severity mapping

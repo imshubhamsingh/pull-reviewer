@@ -5,7 +5,7 @@ import { AskAiPanel, type AskActions, type AskContext } from '@/app/components/a
 import { MarkdownView } from '@/app/components/markdown-view'
 import { cn } from '@/app/lib/utils'
 
-type Tab = 'write' | 'preview' | 'ask'
+type Tab = 'write' | 'preview' | 'ask' | 'chat'
 
 interface Props {
   initial?: string
@@ -16,6 +16,11 @@ interface Props {
   onSave: (body: string) => Promise<void>
   onCancel: () => void
   saveLabel?: string
+  /** When provided, a "💬 Chat" tab appears. Clicking the footer "Send to
+   *  chat" button hands the textarea body to this callback, which pivots the
+   *  right pane to Chat and pre-fills the chat composer. Multi-turn from
+   *  there. */
+  onSendToChat?: (body: string) => void
 }
 
 export function LineComposer({
@@ -26,6 +31,7 @@ export function LineComposer({
   onSave,
   onCancel,
   saveLabel = 'Add comment',
+  onSendToChat,
 }: Props): JSX.Element {
   const [body, setBody] = useState(initial)
   const [busy, setBusy] = useState(false)
@@ -33,6 +39,7 @@ export function LineComposer({
   const [askActions, setAskActions] = useState<AskActions | undefined>(undefined)
   const canSave = body.trim().length > 0 && !busy
   const canAsk = !!askContext && !!onAskStream
+  const canChat = !!onSendToChat
   const onAskActionsChange = useCallback((a: AskActions) => setAskActions(a), [])
 
   const save = async (): Promise<void> => {
@@ -45,6 +52,14 @@ export function LineComposer({
     }
   }
 
+  const sendToChat = (): void => {
+    if (!onSendToChat) return
+    const trimmed = body.trim()
+    if (!trimmed) return
+    onSendToChat(trimmed)
+    onCancel()
+  }
+
   const hasPreview = body.trim().length > 0
 
   return (
@@ -54,7 +69,7 @@ export function LineComposer({
           Comment on {rangeLabel}
         </p>
       )}
-      <Tabs tab={tab} setTab={setTab} canAsk={canAsk} />
+      <Tabs tab={tab} setTab={setTab} canAsk={canAsk} canChat={canChat} />
       {match(tab)
         .with('write', () => (
           <textarea
@@ -95,6 +110,20 @@ export function LineComposer({
             />
           ) : null,
         )
+        .with('chat', () => (
+          <textarea
+            autoFocus
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') sendToChat()
+              if (e.key === 'Escape') onCancel()
+            }}
+            placeholder={`Ask the chat about ${rangeLabel ?? 'this code'}… (⌘↵ to send)`}
+            rows={3}
+            className="bg-bg border-border text-text-primary w-full resize-y rounded-sm border px-2 py-1 text-xs leading-relaxed outline-none"
+          />
+        ))
         .exhaustive()}
       <PrimaryFooter
         tab={tab}
@@ -104,6 +133,8 @@ export function LineComposer({
         saveLabel={saveLabel}
         saveBusy={busy}
         askActions={askActions}
+        onSendToChat={sendToChat}
+        canSendToChat={canChat && body.trim().length > 0}
       />
     </div>
   )
@@ -117,6 +148,8 @@ interface PrimaryFooterProps {
   saveLabel: string
   saveBusy: boolean
   askActions: AskActions | undefined
+  onSendToChat: () => void
+  canSendToChat: boolean
 }
 
 function PrimaryFooter({
@@ -127,12 +160,19 @@ function PrimaryFooter({
   saveLabel,
   saveBusy,
   askActions,
+  onSendToChat,
+  canSendToChat,
 }: PrimaryFooterProps): JSX.Element {
   const { onClick, label, disabled } = match(tab)
     .with('ask', () => ({
       onClick: () => askActions?.submit(),
       label: askActions?.busy ? 'Asking…' : 'Ask',
       disabled: !askActions?.canSubmit,
+    }))
+    .with('chat', () => ({
+      onClick: onSendToChat,
+      label: 'Send to chat',
+      disabled: !canSendToChat,
     }))
     .otherwise(() => ({
       onClick: onSave,
@@ -164,16 +204,19 @@ function Tabs({
   tab,
   setTab,
   canAsk,
+  canChat,
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   canAsk: boolean
+  canChat: boolean
 }): JSX.Element {
   return (
     <div className="border-border mb-2 flex gap-1 border-b">
       <TabBtn active={tab === 'write'} onClick={() => setTab('write')} label="Write" />
       <TabBtn active={tab === 'preview'} onClick={() => setTab('preview')} label="Preview" />
       {canAsk && <TabBtn active={tab === 'ask'} onClick={() => setTab('ask')} label="✨ Ask AI" />}
+      {canChat && <TabBtn active={tab === 'chat'} onClick={() => setTab('chat')} label="💬 Chat" />}
     </div>
   )
 }

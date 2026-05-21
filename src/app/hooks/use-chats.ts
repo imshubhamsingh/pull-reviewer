@@ -169,7 +169,20 @@ export function useChats(repo: string, prNumber: number): ChatsState {
           { signal: ac.signal },
         )) {
           setStreamEvents((prev) => [...prev, evt])
-          if (evt.event === 'done') {
+          if (evt.event === 'partial_text') {
+            // Stream raw model text into the bubble so the user sees progress
+            // instead of "thinking…". The body gets replaced with the parsed
+            // envelope markdown on `done`; the raw JSON envelope shell that
+            // wraps it is fine to flash briefly here.
+            const chunk = evt.data.text
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === tempAssistantId && m.status === 'streaming'
+                  ? { ...m, body: m.body + chunk }
+                  : m,
+              ),
+            )
+          } else if (evt.event === 'done') {
             setMessages((prev) => prev.map((m) => (m.id === tempAssistantId ? evt.data : m)))
             // Bump this chat to the top of the list (updated_at moved server-side).
             setChats((prev) => bumpChat(prev, chatId))
@@ -205,6 +218,25 @@ export function useChats(repo: string, prNumber: number): ChatsState {
         setStreaming(false)
         placeholderIdRef.current = null
         if (abortRef.current === ac) abortRef.current = null
+        // SSE-close-without-done race: the stream may end without yielding a
+        // `done` event even though the backend persisted the final message.
+        // Re-fetch THIS chat's messages directly — going through `refresh()`
+        // would read its stale-closure `activeChatId` (null at send-time on a
+        // brand-new chat) and wipe the message list. The setter callback
+        // checks the user is still viewing this chat before overwriting.
+        if (!ac.signal.aborted && chatId != null) {
+          api.chats.listMessages(repo, prNumber, chatId).then(
+            (list) => {
+              setMessages((current) => {
+                const stillHere = current.some((m) => m.chatId === chatId)
+                return stillHere ? list : current
+              })
+            },
+            () => {
+              /* network glitch — leave the optimistic state in place. */
+            },
+          )
+        }
       }
     },
     [activeChatId, newChat, repo, prNumber, streaming],

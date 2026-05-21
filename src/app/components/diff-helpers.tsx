@@ -3,6 +3,8 @@ import { match } from 'ts-pattern'
 import { cn } from '@/app/lib/utils'
 import { SHIKI_THEME, type useShiki } from '@/app/hooks/use-shiki'
 import { inferLang } from '@/app/lib/code-utils'
+import { highlightTokens } from '@/app/lib/highlight-matches'
+import type { LineMatchRange } from '@/app/lib/code-search'
 import type { BundledLanguage } from 'shiki'
 
 /**
@@ -67,10 +69,16 @@ export function CodeContent({
   content,
   hl,
   file,
+  matches = EMPTY_MATCHES,
+  activeMatch = null,
 }: {
   content: string
   hl: ReturnType<typeof useShiki>
   file: string
+  /** Search match ranges within this content; paints `.search-match`. */
+  matches?: LineMatchRange[]
+  /** Single range to mark with `.search-match-active` + flash target. */
+  activeMatch?: LineMatchRange | null
 }): JSX.Element {
   if (!hl) return <span>{content || ' '}</span>
   if (!content) return <span> </span>
@@ -78,16 +86,24 @@ export function CodeContent({
   const safe = (hl.getLoadedLanguages().includes(lang) ? lang : 'plaintext') as BundledLanguage
   const { tokens } = hl.codeToTokens(content, { lang: safe, theme: SHIKI_THEME })
   const line = tokens[0] ?? []
+  const segments = highlightTokens(line, matches, activeMatch)
   return (
     <>
-      {line.map((t, i) => (
-        <span key={i} style={{ color: t.color }}>
-          {t.content}
+      {segments.map((seg, i) => (
+        <span
+          key={i}
+          className={cn(seg.matched && 'search-match', seg.active && 'search-match-active')}
+          data-search-active={seg.active ? 'true' : undefined}
+          style={{ color: seg.color }}
+        >
+          {seg.content}
         </span>
       ))}
     </>
   )
 }
+
+const EMPTY_MATCHES: LineMatchRange[] = []
 
 export function Notice({
   children,

@@ -121,6 +121,155 @@ The `state` diagram kind renders an XState v5-shaped machine config as a labeled
 - If the PR has multiple distinct flows (e.g., onboarding + settings change), give each its own diagram step inside the same User journey chapter.
 - **Skip this chapter only when the PR has zero user-facing behaviour change** (pure refactor, backend-only change with no API contract impact, internal tooling). When in doubt, include it.
 
+## Backend chapter diagrams — required for backend changes
+
+When a chapter covers a backend change — new / changed DB tables, new / changed
+HTTP / RPC / GraphQL endpoints, new domain models, new request flows — that
+chapter MUST include the relevant diagram step(s) AND structured docs steps.
+Diagrams and structured tables are the high-bandwidth way to convey backend
+shape; missing them makes the chapter much harder to review.
+
+**Triggers** — apply when the chapter discusses ANY of:
+
+- A migration that adds / drops / alters tables, columns, or indexes
+  (`*.sql`, `migrations/*`, Prisma / Alembic / Flyway / Liquibase, ORM
+  model files that change schema).
+- A new or modified HTTP / RPC / GraphQL endpoint (route handler,
+  controller method, schema file, `.proto`, OpenAPI spec).
+- A new or substantially modified domain class / DTO with non-trivial
+  fields or relationships to other domain classes.
+- A new or substantially changed request flow that crosses ≥ 2 service
+  / repository boundaries.
+
+**Every backend chapter MUST emit at least one diagram step.** Skipping
+diagrams because "the change is small" or "the code is self-explanatory" is
+a defect — backend changes are always worth visualising for the reviewer.
+Pick the kinds that match the change; most backend chapters emit 2–3:
+
+- `kind: 'sequence'` (sequenceDiagram) — **MANDATORY for every chapter that
+  touches a controller / route handler / service / repository / DAO**, even
+  if the change feels small. This is the end-to-end request lifecycle the
+  reviewer needs to see. Show the full path:
+  `Client → Controller → (validation / auth) → Service → Repository → DB`
+  and the response path back. Include external calls (`External API`,
+  message queue, cache) when they're hit. Use actors `Client`, `Controller`,
+  `Service`, `Repository`, `DB`, `External`. Keep ≤ 12 messages — collapse
+  internal helper calls into a single message when needed. If the chapter
+  covers multiple endpoints, emit one sequence step per endpoint (or merge
+  when the flows are 90% identical, with a note in `body`).
+- `kind: 'er'` (erDiagram) — **REQUIRED** when the chapter covers a new or
+  altered table. Show the new table with its columns + FK relationships to
+  existing tables. Existing tables appear as referenced nodes only (no full
+  field list). Cap ~8 nodes.
+- `kind: 'class'` (classDiagram) — **REQUIRED** when the chapter introduces
+  a new domain class with ≥ 3 fields OR a relationship to another domain
+  class. Include fields with types, methods (where meaningful), and edges
+  with 1:1 / 1:N / N:M cardinality. Cap ~12 nodes.
+- `kind: 'flowchart'` (flowchart TD) — use for branching backend workflows
+  (validation pipelines, retry / fallback logic, multi-step background
+  jobs, error-recovery paths). Also use for **timing diagrams** — emit
+  `flowchart LR` with nodes labelled `t0`, `t1`, … showing the order of
+  operations and any concurrency / serialisation (e.g., "fetch user +
+  fetch settings happen in parallel; both must resolve before mapping").
+- `kind: 'state'` (stateDiagram-v2 via the `state` kind — see "State
+  Diagrams" above) — **REQUIRED** when the chapter describes finite-state
+  logic in the backend (job lifecycle, async upload phases, state machine
+  driven by webhooks).
+
+**Required docs steps — one concern per step, do NOT cram.** Each item below
+is its own `panel: 'docs'` step. A chapter that introduces 4 endpoints
+emits, AT MINIMUM, 4 docs steps (one OpenAPI per endpoint) PLUS the
+permission step PLUS the AM→SM step — not "permission + 4 OpenAPI + AM→SM
+crammed into one body". The model's tendency is to merge these into a
+single 1.5k-char docs step; that truncates and silently drops items. **Do
+not merge.**
+
+- **OpenAPI snippet step (REQUIRED, one step per new / changed endpoint).**
+  `panel: 'docs'`, title `"OpenAPI · <METHOD> <route>"`, body is a single
+  `` ```yaml `` fenced block emitting an OpenAPI 3.1 fragment covering
+  `paths.<route>.<method>.{requestBody, responses, parameters, security}`.
+  Use repo-conventional schema names; `$ref` external schemas if any. **One
+  endpoint per step — do not stack endpoints into the same fence.** A
+  3-endpoint chapter emits 3 OpenAPI steps.
+- **Request / response structure-table step (REQUIRED, one step per new /
+  changed endpoint).** Two markdown tables per endpoint:
+  `| field | type | required | notes |` — one for the request body, one for
+  the response. Add a third table for URL / query params when present.
+  Title `"Shapes · <METHOD> <route>"`. **Do not omit the response table.**
+- **Permission summary step (REQUIRED when the chapter covers ≥ 1 endpoint
+  with an auth guard).** Single docs step with a markdown table:
+  `| endpoint | method | guard | scope | notes |`. The "guard" column names
+  the decorator / middleware / inline check (`@PreAuthorize`,
+  `requireAuth()`, `Depends(get_current_user)`, etc.). Title `"Permissions"`.
+- **AM → SM mapping step (REQUIRED when ≥ 1 endpoint maps an API DTO into
+  a service-layer model).** One step. Title `"AM → SM mapping"`. Markdown
+  table per mapping site: `| API field | SM field | mapping | notes |`.
+  "mapping" is one of: `direct`, `cast`, `enum-parse`, `default-applied`,
+  `null-coalesced`, `lossy`. Show the mapping site as `file:line` in the
+  surrounding prose. **Emit a row group per endpoint that has a mapping.**
+  Skipping endpoints because they look similar to one already covered is a
+  defect.
+
+**Composition rules — endpoint chapters MUST decompose.**
+
+The default shape for any chapter covering ≥ 1 endpoint:
+
+1. Brief docs step (chapter overview, 2–4 sentences).
+2. Permission summary docs step (if any endpoint has auth).
+3. AM → SM mapping docs step (if any endpoint maps DTOs into SM).
+4. ONE OpenAPI docs step PER endpoint.
+5. ONE shapes docs step PER endpoint (request + response tables).
+6. One sequence diagram step (`kind: 'sequence'`) showing the request
+   lifecycle. Multiple endpoints can share one diagram if flows are 90%+
+   identical; otherwise emit one per endpoint.
+7. Code steps pinning the controller / service / repository implementations.
+
+A 3-endpoint chapter is therefore 1 (overview) + 1 (permissions) + 1
+(AM→SM) + 3 (OpenAPI) + 3 (shapes) + 1 (sequence) + N (code) ≈ 10–15
+steps. **Do not collapse this into 3 steps.** If you find yourself writing
+a docs step longer than ~1500 characters, you are cramming — split it.
+
+Other composition rules:
+
+- One concept per step — don't bundle the ER diagram and the class diagram
+  into one step.
+- A diagram-only step still needs a non-empty `body` introducing what the
+  diagram shows.
+- Skip a kind cleanly if its trigger isn't met. Pure handler-tweak PRs
+  don't need a class diagram; backend PRs without auth don't need a
+  permission table.
+
+**Self-audit before closing each backend chapter — STOP and re-emit if any
+answer is "missing":**
+
+Walk this list out loud (in your head) at the end of each chapter, BEFORE
+writing the closing `}`:
+
+1. **Endpoints in this chapter?** For each one I count, is there:
+   - exactly one OpenAPI step? (yes / missing)
+   - exactly one shapes step? (yes / missing)
+2. **Auth guard mentioned in this chapter?** → Permission summary step
+   present? (yes / missing)
+3. **DTO → service model conversion in this chapter?** → AM → SM mapping
+   step present? (yes / missing)
+4. **Touched a controller / route handler / service / repository / DAO?**
+   → `kind: 'sequence'` step present? (yes / missing)
+5. **Touched a migration / DB schema?** → `kind: 'er'` step present?
+   (yes / missing)
+6. **New domain class with non-trivial structure?** → `kind: 'class'` step
+   present? (yes / missing)
+7. **Touched state-machine / lifecycle logic?** → `kind: 'state'` step
+   present? (yes / missing)
+
+If ANY answer is "missing", **stop, go back, and add the step**. Do not
+proceed to the next chapter with a missing required step. The most common
+failure mode is the model assuming "I'll bundle this with the next thing"
+— that bundling never happens. Emit each step now, individually.
+
+**Anti-goal:** these diagrams + tables live on the tour (descriptive). The
+review pass is for *critique* — gaps, drift, anti-patterns. Don't mirror
+the table here in the review pass.
+
 ## Code-map
 - 'code-map' steps describe an *area* of the codebase at a glance — used for spatial overview, not for reading code.
 
@@ -159,3 +308,25 @@ Set only when you have something worth flagging. Walk the **Code Review Hierarch
 - Empty critique is better than a noisy one. Don't manufacture issues to fill the section.
 - Don't duplicate: if an issue is already covered by a step's narration, skip it.
 - Stop at the level that matters — a blocker correctness issue makes the style nits irrelevant.
+
+## Final pass — file-coverage self-audit (REQUIRED before emitting)
+
+Before you write the closing `]` of the JSON array, run this audit silently. The single most common failure of this prompt is dropping files from the diff — the validator rejects the output and the user pays for a full retry (~$1+). The audit takes seconds. Don't skip it.
+
+1. **Re-read the "Changed files" list** from the PR context section above. That list is the authoritative set — every path on it MUST appear somewhere in your tour.
+2. **Walk the list path by path.** For each path, identify the single step that owns it:
+   - Either some step has `code.file === <path>` (the file is *pinned* to that step), OR
+   - some step has `<path>` in its `references[]` array (the file is *mentioned* by that step).
+3. **If any path has neither, you have a coverage gap. Stop and fix it now**, before emitting the closing `]`. Two ways to fix:
+   - Add the path to `references[]` of the most-related existing step. The "Supporting changes" / final chapter is the default landing zone for trivia (tests, lockfiles, generated assets, config tweaks); add the path there with a one-line mention in the step's `body`.
+   - If the path genuinely deserves its own step (substantive change you missed), add the step to the appropriate chapter.
+4. **Common drop categories — check these explicitly:**
+   - Service-layer model classes / DTOs that mirror domain models (e.g., `SM*.kt`, `*Dto.java`, `*Model.ts`). Easy to skip because they're "boring scaffolding" — they still need coverage.
+   - Mapper / converter files that pair with the models above.
+   - Test fixtures, factory files, seed data.
+   - Generated files (codegen output, compiled schemas, lockfiles).
+   - Config tweaks (yaml, env templates, build files).
+   - Files whose diff is small (`+1/-1`, renames, formatting-only churn).
+5. **Do not narrate the audit in step bodies.** It is silent. If a file landed in `references[]` as a result of the audit, its mention can be one line — "Tests covering the above" / "Generated schema bindings" / "Supporting config change" — but you must mention it. A bare reference with no body context is still better than dropping the file.
+
+If your final count of unique paths across all `code.file` + `references[]` doesn't equal the count of files in the "Changed files" list, the audit hasn't passed. Re-run it.

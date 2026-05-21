@@ -12,6 +12,9 @@ interface Props {
   onRegenerate: () => void
   onJumpRef: (ref: CodeRef) => void
   onUseAsComment: (message: PrChatMessage) => void | Promise<void>
+  /** External pre-fill payload from "Send to chat" on a line range — pumped
+   *  into the Composer's textarea. Nonce-keyed so repeat clicks re-seed. */
+  composerPrefill?: { text: string; nonce: number }
 }
 
 /**
@@ -31,6 +34,7 @@ export function ChatPane({
   onRegenerate,
   onJumpRef,
   onUseAsComment,
+  composerPrefill,
 }: Props): JSX.Element {
   const chat = useChats(repo, prNumber)
 
@@ -85,7 +89,12 @@ export function ChatPane({
           {chat.error}
         </p>
       )}
-      <Composer busy={chat.streaming} onSend={chat.send} onCancel={chat.cancel} />
+      <Composer
+        busy={chat.streaming}
+        onSend={chat.send}
+        onCancel={chat.cancel}
+        prefill={composerPrefill}
+      />
     </div>
   )
 }

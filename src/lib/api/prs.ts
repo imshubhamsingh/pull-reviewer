@@ -9,6 +9,11 @@ export const prs = {
   /** Local cache of PRs the user has opened in this app, newest first. */
   recents: () => http.get<PullRequestSummary[]>('/api/pull-requests/recents'),
 
+  /** Re-fetch each cached recent's live state from GitHub (batched) and
+   *  return the refreshed list. Use on explicit Refresh; `recents()` alone
+   *  returns whatever's in the local cache. */
+  refreshRecents: () => http.post<PullRequestSummary[]>('/api/pull-requests/recents/refresh', null),
+
   /** Upsert the PR into the local recents cache and bump its last-opened time. */
   touchRecent: (pr: PullRequestSummary) =>
     http.post<{ ok: boolean }>('/api/pull-requests/recents/touch', pr),

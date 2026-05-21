@@ -1,30 +1,13 @@
 import { useEffect, useState } from 'react'
 import { createHighlighter, type Highlighter } from 'shiki'
+import { SHIKI_LANGS } from '@/app/lib/language-registry'
 
 const THEME = 'github-dark-dimmed'
-
-const LANGS = [
-  'typescript',
-  'tsx',
-  'javascript',
-  'jsx',
-  'json',
-  'css',
-  'html',
-  'shell',
-  'bash',
-  'markdown',
-  'python',
-  'rust',
-  'go',
-  'sql',
-  'yaml',
-] as const
 
 let singleton: Promise<Highlighter> | undefined
 
 function getHighlighter(): Promise<Highlighter> {
-  singleton ??= createHighlighter({ themes: [THEME], langs: [...LANGS] })
+  singleton ??= createHighlighter({ themes: [THEME], langs: [...SHIKI_LANGS] })
   return singleton
 }
 

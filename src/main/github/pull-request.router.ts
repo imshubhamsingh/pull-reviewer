@@ -27,6 +27,19 @@ export class PullRequestRouter extends Service {
 
     app.get('/recents', (c) => c.json(this.pullRequests.listRecents()))
 
+    // Re-fetch each cached recent's live state from GitHub via batched
+    // node() queries, then return the refreshed list. Used by the
+    // renderer's Refresh button so merged / closed PRs flip state.
+    app.post('/recents/refresh', async (c) => {
+      try {
+        const data = await this.pullRequests.refreshRecents()
+        return c.json(data)
+      } catch (err) {
+        this.logger.error('Refresh recents failed', { err: (err as Error).message })
+        return c.json({ error: (err as Error).message }, 500)
+      }
+    })
+
     // On-demand resolution of a PR's base SHA — used by the Diff pane when
     // the local tour record doesn't have one (older tours).
     app.get('/:repoOwner/:repoName/:prNumber/base-sha', async (c) => {
