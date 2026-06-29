@@ -1,7 +1,7 @@
 import { ExternalLink, PanelLeft, PanelRight } from 'lucide-react'
 import { cn } from '@/app/lib/utils'
 import { match } from 'ts-pattern'
-import { useEffect, useState, type JSX, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from 'react'
 import { useTour } from '@/app/hooks/use-tour'
 import { useChapterCompletions } from '@/app/hooks/use-chapter-completions'
 import { useChapterNav } from '@/app/hooks/use-chapter-nav'
@@ -17,13 +17,17 @@ import { ChatPane } from '@/app/components/chat/chat-pane'
 import { RightPaneToggle, type RightPaneMode } from '@/app/components/chat/right-pane-toggle'
 import { StandaloneCodeView } from '@/app/components/chat/standalone-code-view'
 import { CodePane } from '@/app/components/code-pane'
+import { ContextMenu, type ContextMenuItem } from '@/app/components/context-menu'
 import { DiagramPane } from '@/app/components/diagram-pane'
 import { DocsPane } from '@/app/components/docs-pane'
 import { FileMap } from '@/app/components/file-map'
 import { GeneratingPanel } from '@/app/components/generating-panel'
 import { ReviewPane } from '@/app/components/review-pane'
 import { StaleBanner } from '@/app/components/stale-banner'
-import type { CodeRef, Finding, PrChatMessage, TourResult, TourStep } from '@/lib/api'
+import { UsagesPane } from '@/app/components/usages-pane'
+import type { CodeContextTarget } from '@/app/hooks/use-code-context-menu'
+import { api } from '@/lib/api'
+import type { CodeRef, Finding, PrChatMessage, TourResult, TourStep, UsagesResult } from '@/lib/api'
 
 interface Props {
   repo: string
@@ -207,6 +211,21 @@ function ReadyView({
   // user clicks "Send to chat" from a line-composer Chat tab. `nonce` keys
   // the Composer's seed effect so repeat clicks re-prefill.
   const [chatPrefill, setChatPrefill] = useState<{ text: string; nonce: number } | null>(null)
+  // Right-click context-menu state. `target` carries the resolved click site
+  // — file / line / column / symbol guess — plus the anchor coordinates the
+  // ContextMenu portal renders from.
+  const [contextMenu, setContextMenu] = useState<{ target: CodeContextTarget } | null>(null)
+  // Find-usages query + result. State lives here so it survives switching
+  // away to Chat / Map / Review and back. `prevRightMode` remembers which
+  // pane to fall back to when the user closes the Usages pane.
+  const [usages, setUsages] = useState<{
+    symbol: string
+    result: UsagesResult | null
+    loading: boolean
+    error: string | undefined
+  } | null>(null)
+  const usagesAbortRef = useRef<AbortController | null>(null)
+  const prevRightModeRef = useRef<RightPaneMode>('map')
   const sendSelectionToChat = (input: {
     file: string
     startLine: number
@@ -343,6 +362,106 @@ function ReadyView({
   // map highlights one thing while you're looking at another.
   const currentFile =
     centerState.kind === 'standalone' ? centerState.ref.file : nav.current?.step.code?.file
+
+  // Fire a Find-usages search. Pivots the right pane to Usages, remembers
+  // the previous mode so the close button can return to it, and aborts any
+  // in-flight query so the latest click wins.
+  const runUsagesQuery = useCallback(
+    (target: CodeContextTarget): void => {
+      setRightPaneMode((prev) => {
+        if (prev !== 'usages') prevRightModeRef.current = prev
+        return 'usages'
+      })
+      usagesAbortRef.current?.abort()
+      const ac = new AbortController()
+      usagesAbortRef.current = ac
+      setUsages({ symbol: target.symbol, result: null, loading: true, error: undefined })
+      api.usages
+        .find({
+          repo,
+          sha: tour.headRefOid,
+          file: target.file,
+          line: target.line,
+          column: target.column,
+          kind: 'references',
+        })
+        .then((result) => {
+          if (ac.signal.aborted) return
+          setUsages({
+            symbol: result.symbol || target.symbol,
+            result,
+            loading: false,
+            error: undefined,
+          })
+        })
+        .catch((err: Error) => {
+          if (ac.signal.aborted) return
+          setUsages({ symbol: target.symbol, result: null, loading: false, error: err.message })
+        })
+    },
+    [repo, tour.headRefOid],
+  )
+
+  // Fire Go-to-definition. Routes the first definition site through the
+  // existing `jumpToRef` flow — same behaviour as clicking a finding /
+  // chat ref. No right-pane state change.
+  const runDefinitionJump = useCallback(
+    (target: CodeContextTarget): void => {
+      void api.usages
+        .find({
+          repo,
+          sha: tour.headRefOid,
+          file: target.file,
+          line: target.line,
+          column: target.column,
+          kind: 'definition',
+        })
+        .then((result) => {
+          const first = result.hits[0]
+          if (!first) return
+          jumpToRef({ file: first.file, lineStart: first.line })
+        })
+        .catch(() => {
+          /* swallow — definition lookup is best-effort */
+        })
+    },
+    [repo, tour.headRefOid],
+  )
+
+  const contextMenuItems = ((): ContextMenuItem[] => {
+    const target = contextMenu?.target
+    if (!target) return []
+    const ext = (target.file.split('.').pop() ?? '').toLowerCase()
+    const isTs =
+      ext === 'ts' ||
+      ext === 'tsx' ||
+      ext === 'js' ||
+      ext === 'jsx' ||
+      ext === 'mjs' ||
+      ext === 'cjs'
+    return [
+      {
+        label: target.symbol ? `Find usages of \`${target.symbol}\`` : 'Find usages',
+        onClick: () => runUsagesQuery(target),
+        disabled: !target.symbol,
+      },
+      {
+        label: 'Go to definition',
+        onClick: () => runDefinitionJump(target),
+        disabled: !target.symbol || !isTs,
+        hint: !isTs ? 'TS only' : undefined,
+      },
+      {
+        label: 'Copy symbol',
+        onClick: () => {
+          if (!target.symbol) return
+          void navigator.clipboard.writeText(target.symbol)
+        },
+        disabled: !target.symbol,
+      },
+    ]
+  })()
+
   return (
     <div className="flex h-full flex-col">
       {isStale && (
@@ -401,6 +520,7 @@ function ReadyView({
               drafts={drafts}
               qa={qa}
               onClose={closeStandalone}
+              onContextRequest={(t) => setContextMenu({ target: t })}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               diffLayout={diffLayout}
@@ -424,6 +544,7 @@ function ReadyView({
               aiPendingExpand: pendingFindingExpand,
               pendingScroll,
               onSendToChat: sendSelectionToChat,
+              onContextRequest: (t) => setContextMenu({ target: t }),
               viewMode,
               onViewModeChange: setViewMode,
               diffLayout,
@@ -473,9 +594,27 @@ function ReadyView({
                 composerPrefill={chatPrefill ?? undefined}
               />
             )}
+            {rightPaneMode === 'usages' && (
+              <UsagesPane
+                symbol={usages?.symbol ?? ''}
+                result={usages?.result ?? null}
+                loading={usages?.loading ?? false}
+                error={usages?.error}
+                onJumpRef={(ref) => jumpToRef(ref)}
+                onClose={() => setRightPaneMode(prevRightModeRef.current)}
+              />
+            )}
           </Section>
         )}
       </div>
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenuItems}
+          anchorX={contextMenu.target.anchorX}
+          anchorY={contextMenu.target.anchorY}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
       <ChapterStepper
         chapters={tour.chapters}
         nav={nav}
@@ -498,6 +637,7 @@ function rightPaneTitle(mode: RightPaneMode, fileCount: number, findingCount: nu
     if (findingCount === 0) return 'Review'
     return `Review · ${findingCount} finding${findingCount === 1 ? '' : 's'}`
   }
+  if (mode === 'usages') return 'Usages'
   return 'Chat'
 }
 
@@ -528,6 +668,7 @@ interface CenterArgs {
     snippet: string
     question: string
   }) => void
+  onContextRequest: (target: CodeContextTarget) => void
 }
 
 function renderCenter(args: CenterArgs): JSX.Element {
@@ -548,6 +689,7 @@ function renderCenter(args: CenterArgs): JSX.Element {
     aiPendingExpand,
     pendingScroll,
     onSendToChat,
+    onContextRequest,
     viewMode,
     onViewModeChange,
     diffLayout,
@@ -566,6 +708,7 @@ function renderCenter(args: CenterArgs): JSX.Element {
         aiPendingExpand={aiPendingExpand}
         pendingScroll={pendingScroll}
         onSendToChat={onSendToChat}
+        onContextRequest={onContextRequest}
         onJumpToRef={jumpToRef}
         viewMode={viewMode}
         onViewModeChange={onViewModeChange}

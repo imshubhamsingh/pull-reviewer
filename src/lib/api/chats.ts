@@ -58,6 +58,16 @@ export const chats = {
   remove: (chatId: number) => http.del<{ deleted: boolean }>(`/api/chats/${chatId}`),
 
   removeMessage: (id: number) => http.del<{ deleted: boolean }>(`/api/chats/messages/${id}`),
+
+  /**
+   * Persist a repaired mermaid source on one diagram inside an existing
+   * message. Returns the updated message so callers can sync local state.
+   * Used by the MermaidPane auto-fix flow on chat diagrams.
+   */
+  patchMessageMermaid: (messageId: number, diagramIndex: number, source: string) =>
+    http.patch<PrChatMessage>(`/api/chats/messages/${messageId}/diagrams/${diagramIndex}/mermaid`, {
+      source,
+    }),
 }
 
 async function* streamSend(

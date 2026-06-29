@@ -8,6 +8,7 @@ import type { Review } from '@/main/tour/review-schema'
 import type { AiReviewParser } from '@/main/tour/ai-review.parser'
 import type { AiReviewPromptBuilder } from '@/main/tour/ai-review-prompt.builder'
 import type { Tour } from '@/main/tour/tour-schema'
+import { computeAdaptiveTimeoutMs, withTimeout } from '@/main/tour/with-timeout'
 import { Service } from '@/main/service'
 
 export interface GenerateReviewOptions {
@@ -72,13 +73,18 @@ export class AiReviewService extends Service {
   ): Promise<{ review: Review | null; raw: string | null; error: Error | null }> {
     const prompt = this.buildPrompt(opts, retryHint)
     let raw: string | null = null
+    const timeoutMs = computeAdaptiveTimeoutMs({
+      envKey: 'REVIEW_ATTEMPT_TIMEOUT_MS',
+      fileCount: opts.ctx.files.length,
+    })
+    const { signal, cleanup, timedOut } = withTimeout(opts.signal, timeoutMs)
     try {
       const run = await this.cli.run({
         prompt,
         provider: opts.provider,
         model: opts.model,
         cwd: opts.cwd,
-        signal: opts.signal,
+        signal,
         onEvent: tagged,
       })
       raw = run.raw
@@ -89,8 +95,16 @@ export class AiReviewService extends Service {
       })
       return { review, raw, error: null }
     } catch (err) {
-      this.logger.warn('AI review attempt failed', { err: (err as Error).message })
-      return { review: null, raw, error: err as Error }
+      const wrapped = timedOut.fired
+        ? new Error(
+            `AI review timed out after ${Math.round(timeoutMs / 1000)}s (${opts.ctx.files.length} files) — ` +
+              `set REVIEW_ATTEMPT_TIMEOUT_MS to override.`,
+          )
+        : (err as Error)
+      this.logger.warn('AI review attempt failed', { err: wrapped.message })
+      return { review: null, raw, error: wrapped }
+    } finally {
+      cleanup()
     }
   }
 

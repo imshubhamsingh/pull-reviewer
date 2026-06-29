@@ -1,5 +1,6 @@
 import type { GitCloneManager } from '@/main/git/clone.manager'
 import type { FileSnapshot, FileSnapshotStore } from '@/main/files/file-snapshot.store'
+import { MAX_INLINE_BYTES } from '@/main/git/blob-reader'
 import { Service } from '@/main/service'
 
 /**
@@ -8,6 +9,11 @@ import { Service } from '@/main/service'
  *
  *  - hit: return the row, touch `accessed_at` for LRU eviction (Phase 11).
  *  - miss: read via `GitCloneManager.showFile`, persist, return.
+ *
+ * Exception: cached rows with `encoding: 'omitted'` whose stored size now
+ * fits under `MAX_INLINE_BYTES` are treated as misses and refetched. This
+ * lets a cap bump self-heal — without it, a file that was omitted under the
+ * old 256 KB cap would stay omitted forever even after the cap moves up.
  */
 export class FileSnapshotService extends Service {
   constructor(
@@ -19,7 +25,7 @@ export class FileSnapshotService extends Service {
 
   async get(repo: string, sha: string, path: string): Promise<FileSnapshot> {
     const cached = this.store.get(repo, sha, path)
-    if (cached) {
+    if (cached && !shouldRefetch(cached)) {
       this.store.touchAccessed(repo, sha, path)
       return cached
     }
@@ -39,4 +45,8 @@ export class FileSnapshotService extends Service {
     this.store.put(snap)
     return snap
   }
+}
+
+function shouldRefetch(cached: FileSnapshot): boolean {
+  return cached.encoding === 'omitted' && cached.size > 0 && cached.size <= MAX_INLINE_BYTES
 }

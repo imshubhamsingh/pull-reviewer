@@ -40,6 +40,7 @@ import { CachedTourSource } from '@/main/tour/cached-tour-source'
 import { ChapterCompletionService } from '@/main/tour/chapter-completion.service'
 import { ChapterCompletionStore } from '@/main/tour/chapter-completion.store'
 import { CliRunnerService } from '@/main/tour/cli-runner.service'
+import { MermaidRepairService } from '@/main/tour/mermaid-repair.service'
 import { FileReviewService } from '@/main/tour/file-review.service'
 import { FileReviewStore } from '@/main/tour/file-review.store'
 import { GeneratedTourSource } from '@/main/tour/generated-tour-source'
@@ -52,6 +53,8 @@ import { TourParser } from '@/main/tour/tour.parser'
 import { TourRouter } from '@/main/tour/tour.router'
 import { TourService } from '@/main/tour/tour.service'
 import { TourStore } from '@/main/tour/tour.store'
+import { UsagesRouter } from '@/main/usages/usages.router'
+import { UsagesService } from '@/main/usages/usages.service'
 
 export interface Services {
   db: DatabaseService
@@ -79,6 +82,7 @@ export interface Services {
     chats: ChatRouter
     settings: SettingsRouter
     reviewProgress: ReviewProgressRouter
+    usages: UsagesRouter
   }
 }
 
@@ -119,6 +123,8 @@ export function buildServices(): Services {
     aiReview,
   )
   const tours = new TourService(cachedSource, generatedSource, tourStore)
+  const mermaidRepair = new MermaidRepairService(cli)
+  const usages = new UsagesService(clones)
 
   const fileSnapshotStore = new FileSnapshotStore(db.query)
   const files = new FileSnapshotService(clones, fileSnapshotStore)
@@ -183,7 +189,7 @@ export function buildServices(): Services {
     settings,
     routers: {
       pullRequests: new PullRequestRouter(pullRequests),
-      tours: new TourRouter(tours, tourJobs),
+      tours: new TourRouter(tours, tourJobs, mermaidRepair),
       files: new FileRouter(files),
       reviews: new ReviewRouter(reviews),
       hunks: new HunksRouter(hunks),
@@ -195,6 +201,7 @@ export function buildServices(): Services {
         fileReviews,
         aiFindingDismissals,
       ),
+      usages: new UsagesRouter(usages),
     },
   }
 }

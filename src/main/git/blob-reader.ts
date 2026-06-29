@@ -2,7 +2,16 @@ import type { CloneRegistry } from '@/main/git/clone-registry'
 import type { GitRunner } from '@/main/git/git-runner'
 import { Service } from '@/main/service'
 
-const MAX_INLINE_BYTES = 256 * 1024
+/**
+ * Soft cap above which we report a file as `encoding: 'omitted'` instead of
+ * streaming its contents through the IPC. The renderer doesn't crash on big
+ * files, but Shiki tokenization grinds on 1 MB+ JSON / lockfiles. 1 MB is
+ * generous enough to cover most real-world source + generated files
+ * (375-page yarn.lock, large schema dumps) without paying the perf cost on
+ * the ~5 MB outliers. Bumped from 256 KB after that limit hid 300-500 KB
+ * snapshots reviewers actually wanted to read inline.
+ */
+export const MAX_INLINE_BYTES = 1024 * 1024
 
 export type BlobEncoding = 'utf8' | 'base64' | 'omitted'
 

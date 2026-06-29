@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { Service } from '@/main/service'
 import type { Provider } from '@/main/tour/cli-runner.service'
+import type { MermaidRepairService } from '@/main/tour/mermaid-repair.service'
 import type { JobEvent, TourJobManager } from '@/main/tour/tour-job.manager'
 import type { TourService } from '@/main/tour/tour.service'
 
@@ -16,10 +17,16 @@ interface StartJobBody {
   model?: string
 }
 
+interface RepairMermaidBody {
+  source?: string
+  error?: string
+}
+
 export class TourRouter extends Service {
   constructor(
     private readonly tours: TourService,
     private readonly jobs: TourJobManager,
+    private readonly mermaidRepair: MermaidRepairService,
   ) {
     super()
   }
@@ -186,6 +193,30 @@ export class TourRouter extends Service {
         )
       if (!summary) return c.json({ cancelled: false })
       return c.json({ cancelled: this.jobs.cancel(summary.job.id) })
+    })
+
+    // POST /tools/repair-mermaid → ask a cheap model to fix Mermaid syntax.
+    // Body: `{ source, error }`. Returns `{ source }`. In-memory only — the
+    // caller is responsible for using the repaired source. Used by the
+    // MermaidPane "Auto-fix" affordance on chat / tour diagrams that fail
+    // to parse.
+    app.post('/tools/repair-mermaid', async (c) => {
+      const body = await c.req.json<RepairMermaidBody>().catch((): RepairMermaidBody => ({}))
+      if (!body.source || !body.source.trim()) {
+        return c.json({ error: 'source is required' }, 400)
+      }
+      const { ac } = abortableSignal(c.req.raw.signal)
+      try {
+        const result = await this.mermaidRepair.repair({
+          source: body.source,
+          error: body.error ?? '',
+          signal: ac.signal,
+        })
+        return c.json(result)
+      } catch (err) {
+        this.logger.warn('Mermaid repair failed', { err: (err as Error).message })
+        return c.json({ error: (err as Error).message }, 500)
+      }
     })
 
     // GET /jobs → all active + queued jobs (snapshot).

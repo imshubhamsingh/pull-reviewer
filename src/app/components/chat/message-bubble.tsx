@@ -1,15 +1,16 @@
 import { MessageSquareQuote, X } from 'lucide-react'
-import { marked } from 'marked'
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { match } from 'ts-pattern'
 import { RefChips } from '@/app/components/chat/ref-chips'
 import { ChatDiagram } from '@/app/components/chat/chat-diagram'
+import { MarkdownView } from '@/app/components/markdown-view'
 import { cn } from '@/app/lib/utils'
 import type { CodeRef, PrChatMessage } from '@/lib/api'
 
 interface Props {
   message: PrChatMessage
   onDelete?: (id: number) => void
+  onPatchMermaid?: (messageId: number, diagramIndex: number, source: string) => Promise<void>
   onJumpRef?: (ref: CodeRef) => void
   onUseAsComment?: (message: PrChatMessage) => void | Promise<void>
 }
@@ -23,6 +24,7 @@ interface Props {
 export function MessageBubble({
   message,
   onDelete,
+  onPatchMermaid,
   onJumpRef,
   onUseAsComment,
 }: Props): JSX.Element {
@@ -46,6 +48,11 @@ export function MessageBubble({
               index={i}
               messageId={message.id}
               onJumpRef={onJumpRef}
+              onRepaired={
+                onPatchMermaid && message.id > 0
+                  ? (newSource) => onPatchMermaid(message.id, i, newSource)
+                  : undefined
+              }
             />
           ))}
         {refs && onJumpRef && <RefChips refs={refs} onClick={onJumpRef} />}
@@ -97,10 +104,6 @@ function Header({
 
 function Body({ message }: { message: PrChatMessage }): JSX.Element {
   const isUser = message.role === 'user'
-  const renderedMarkdown = useMemo(() => {
-    if (!message.body) return ''
-    return marked.parse(message.body, { async: false }) as string
-  }, [message.body])
 
   if (message.status === 'streaming' && !message.body) {
     return <ThinkingPlaceholder createdAt={message.createdAt} />
@@ -117,14 +120,7 @@ function Body({ message }: { message: PrChatMessage }): JSX.Element {
         message.status === 'interrupted' && 'opacity-80',
       )}
     >
-      {isUser ? (
-        <p className="whitespace-pre-wrap break-words">{message.body}</p>
-      ) : (
-        <div
-          className="markdown min-w-0 break-words"
-          dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
-        />
-      )}
+      <MarkdownView body={message.body} className="min-w-0 break-words" />
     </div>
   )
 }

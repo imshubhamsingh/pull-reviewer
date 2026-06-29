@@ -63,6 +63,13 @@ export const tours = {
   getStale: (repo: string, prNumber: number) =>
     http.get<TourResult>(`/api/tours/${repo}/${prNumber}/stale`),
   /**
+   * One-shot Mermaid syntax repair via a cheap model. Pass the broken source
+   * + the parser's error; receive a corrected source the caller can drop into
+   * its renderer. In-memory only — nothing is persisted.
+   */
+  repairMermaid: (input: { source: string; error: string }) =>
+    http.post<{ source: string }>('/api/tours/tools/repair-mermaid', input),
+  /**
    * If a cached tour exists, returns it (possibly stale — check `currentHeadRefOid !== headRefOid`).
    * Otherwise runs the model. With `force: true`, bypasses the cache and always runs the model.
    */

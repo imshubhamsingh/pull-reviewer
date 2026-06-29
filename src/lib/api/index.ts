@@ -12,8 +12,9 @@ import { reviewProgress } from '@/lib/api/review-progress'
 import { reviews } from '@/lib/api/reviews'
 import { settings } from '@/lib/api/settings'
 import { tours } from '@/lib/api/tours'
+import { usages } from '@/lib/api/usages'
 
-export const api = { prs, tours, files, reviews, qa, chats, settings, reviewProgress }
+export const api = { prs, tours, files, reviews, qa, chats, settings, reviewProgress, usages }
 
 export { http, getBaseUrl, ApiError } from '@/lib/api/base'
 export type { AskStreamEvent } from '@/lib/api/qa'

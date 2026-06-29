@@ -2,6 +2,7 @@ import { FileCode, GitCompareArrows, X } from 'lucide-react'
 import { match } from 'ts-pattern'
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { CodeLines, type ComposerTarget } from '@/app/components/code-lines'
+import type { CodeContextTarget } from '@/app/hooks/use-code-context-menu'
 import { DiffPane } from '@/app/components/diff-pane'
 import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
 import { useGutterSelection } from '@/app/hooks/use-gutter-selection'
@@ -27,6 +28,9 @@ interface Props {
   drafts: ReviewDrafts
   qa: QaThreads
   onClose: () => void
+  /** Right-click handler — forwarded to CodeLines. Set by tour-view to open
+   *  the Find-usages context menu on the resolved target. */
+  onContextRequest?: (target: CodeContextTarget) => void
   /** PR-wide Code/Diff selection — lifted to tour-view so it persists across navigation. */
   viewMode: ViewMode
   onViewModeChange: (m: ViewMode) => void
@@ -51,6 +55,7 @@ export function StandaloneCodeView({
   drafts,
   qa,
   onClose,
+  onContextRequest,
   viewMode,
   onViewModeChange,
   diffLayout,
@@ -123,6 +128,7 @@ export function StandaloneCodeView({
                 hl={hl}
                 viewingBase={viewingBase}
                 commentableLines={commentableLines}
+                onContextRequest={onContextRequest}
               />
             ))
             .exhaustive()
@@ -142,6 +148,7 @@ interface ReadyBodyProps {
   hl: ReturnType<typeof useShiki>
   viewingBase: boolean
   commentableLines: Set<number>
+  onContextRequest?: (target: CodeContextTarget) => void
 }
 
 const EMPTY_LINES: Set<number> = new Set()
@@ -160,6 +167,7 @@ function ReadyBody({
   hl,
   viewingBase,
   commentableLines,
+  onContextRequest,
 }: ReadyBodyProps): JSX.Element {
   const [composer, setComposer] = useState<ComposerTarget | null>(null)
   const selection = useGutterSelection({
@@ -201,6 +209,7 @@ function ReadyBody({
       composer={composer}
       selection={selection}
       commentableLines={commentableLines}
+      onContextRequest={onContextRequest}
       onCloseComposer={() => {
         setComposer(null)
         selection.clear()

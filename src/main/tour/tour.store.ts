@@ -6,7 +6,7 @@ import type { Tour } from '@/main/tour/tour-schema'
 import { Service } from '@/main/service'
 
 /** Bump when the persisted shape changes incompatibly; rows below the current value are treated as stale. */
-const CURRENT_SCHEMA_VERSION = 7
+const CURRENT_SCHEMA_VERSION = 8
 
 export interface TourRecord {
   prId: string // "{repo}#{prNumber}"

@@ -587,3 +587,40 @@ export interface HunksResponse {
   truncated: boolean
   files: Record<string, HunksFileRanges>
 }
+
+// -------- Find usages ---------
+
+export interface UsagesInput {
+  repo: string
+  sha: string
+  /** Repo-relative path of the file the user is in. */
+  file: string
+  /** 1-based line of the click. */
+  line: number
+  /** 0-based column of the click. */
+  column: number
+  /** 'references' = all usages; 'definition' = declaration site only. */
+  kind: 'references' | 'definition'
+}
+
+export interface UsageHit {
+  file: string
+  line: number
+  column: number
+  /** Full source line for that hit, untrimmed. */
+  lineText: string
+  /** Inclusive byte offset of the match start within `lineText`. */
+  matchStart: number
+  /** Exclusive byte offset of the match end within `lineText`. */
+  matchEnd: number
+  /** 'def' when the engine can identify the declaration site; otherwise 'ref'. */
+  classification: 'def' | 'ref'
+}
+
+export interface UsagesResult {
+  /** The identifier the engine actually searched (resolved from line+column). */
+  symbol: string
+  hits: UsageHit[]
+  engine: 'typescript' | 'ripgrep'
+  durationMs: number
+}

@@ -23,6 +23,7 @@ import type {
 } from '@/lib/api'
 import { CodeHeader } from '@/app/components/code-header'
 import { CodeLines, type CodeSearchMatch, type ComposerTarget } from '@/app/components/code-lines'
+import type { CodeContextTarget } from '@/app/hooks/use-code-context-menu'
 import { References } from '@/app/components/references'
 import type { QaThreads } from '@/app/hooks/use-qa-threads'
 import type { ReviewDrafts } from '@/app/hooks/use-review-drafts'
@@ -56,6 +57,9 @@ interface Props {
     question: string
   }) => void
   onJumpToRef: (ref: CodePointer) => void
+  /** Right-click handler — forwarded to CodeLines. Set by tour-view to open
+   *  the Find-usages context menu on the resolved target. */
+  onContextRequest?: (target: CodeContextTarget) => void
   /** PR-wide Code/Diff selection lifted to tour-view so it persists across navigation. */
   viewMode: ViewMode
   onViewModeChange: (m: ViewMode) => void
@@ -75,6 +79,7 @@ export function CodePane({
   pendingScroll,
   onSendToChat,
   onJumpToRef,
+  onContextRequest,
   viewMode,
   onViewModeChange,
   diffLayout,
@@ -131,6 +136,7 @@ export function CodePane({
         aiPendingExpand={aiPendingExpand}
         pendingScroll={pendingScroll}
         onSendToChat={onSendToChat}
+        onContextRequest={onContextRequest}
         commentableLines={commentableSetForFile(hunks, code.file, code.side)}
         onJumpToRef={onJumpToRef}
         mode={viewMode}
@@ -232,6 +238,7 @@ interface ReadyPaneProps {
   }) => void
   commentableLines: Set<number>
   onJumpToRef: (ref: CodePointer) => void
+  onContextRequest?: (target: CodeContextTarget) => void
   mode: ViewMode
   onModeChange: (m: ViewMode) => void
   diffLayout: DiffLayout
@@ -251,6 +258,7 @@ function ReadyPane({
   aiPendingExpand,
   pendingScroll,
   onSendToChat,
+  onContextRequest,
   commentableLines,
   onJumpToRef,
   mode,
@@ -356,6 +364,7 @@ function ReadyPane({
             qa.askStream({ ...input, chapterId: chapterId ?? null }, { onEvent })
           }
           onSendToChat={onSendToChat}
+          onContextRequest={onContextRequest}
           onSaveDraft={async (target, body) => {
             const lo = Math.min(target.startLine, target.endLine)
             const hi = Math.max(target.startLine, target.endLine)

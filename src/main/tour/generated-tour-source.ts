@@ -13,6 +13,7 @@ import type { TourParser } from '@/main/tour/tour.parser'
 import { recordFromGeneration, resultFromRecord } from '@/main/tour/tour-mapping'
 import type { GenerateTourOptions, TourResult, TourSource } from '@/main/tour/tour-source'
 import type { TourStore } from '@/main/tour/tour.store'
+import { computeAdaptiveTimeoutMs, withTimeout } from '@/main/tour/with-timeout'
 import { Service } from '@/main/service'
 
 interface ResolvedSettings {
@@ -26,7 +27,9 @@ interface ParsedRun {
   chapters: Tour
 }
 
-type AttemptOutcome = { ok: true; value: ParsedRun } | { ok: false; error: Error }
+type AttemptOutcome =
+  | { ok: true; value: ParsedRun }
+  | { ok: false; error: Error; isTimeout: boolean }
 
 /** How many times to re-run the model after a parse/validation failure. */
 const MAX_RETRIES = 2
@@ -93,7 +96,9 @@ export class GeneratedTourSource extends Service implements TourSource {
     return this.persist(ctx, tourRun.run, stitchedChapters, review, settings)
   }
 
-  /** Pure retry loop: each iteration delegates to attemptOnce; failures feed into the next prompt. */
+  /** Pure retry loop: each iteration delegates to attemptOnce; failures feed into the next prompt.
+   *  Timeouts short-circuit the loop — re-running with the same (large) prompt would just burn
+   *  another full timeout window; surface the failure to the user so they can retry manually. */
   private async runWithRetries(
     ctx: PrContext,
     settings: ResolvedSettings,
@@ -108,6 +113,10 @@ export class GeneratedTourSource extends Service implements TourSource {
       if (outcome.ok) return outcome.value
       lastError = outcome.error
       this.logger.warn('Tour attempt failed', { attempt, err: lastError.message })
+      if (outcome.isTimeout) {
+        this.logger.warn('Tour attempt timed out — skipping retries to avoid compounding stall')
+        break
+      }
     }
     throw new Error(
       `Tour generation failed after ${MAX_RETRIES + 1} attempts: ${lastError!.message}`,
@@ -124,21 +133,38 @@ export class GeneratedTourSource extends Service implements TourSource {
     isFinalAttempt: boolean,
   ): Promise<AttemptOutcome> {
     const tagged = (e: CliEvent): void => opts.onEvent?.({ ...e, stream: 'tour' })
-    const run = await this.cli.run({
-      prompt: this.promptBuilder.build(ctx, retryHint?.message),
-      provider: settings.provider,
-      model: settings.model,
-      cwd: worktree,
-      signal: settings.signal,
-      onEvent: tagged,
+    const timeoutMs = computeAdaptiveTimeoutMs({
+      envKey: 'TOUR_ATTEMPT_TIMEOUT_MS',
+      fileCount: ctx.files.length,
     })
-    tagged({ type: 'phase', name: 'Parsing tour' })
+    const { signal, cleanup, timedOut } = withTimeout(settings.signal, timeoutMs)
     try {
+      const run = await this.cli.run({
+        prompt: this.promptBuilder.build(ctx, retryHint?.message),
+        provider: settings.provider,
+        model: settings.model,
+        cwd: worktree,
+        signal,
+        onEvent: tagged,
+      })
+      tagged({ type: 'phase', name: 'Parsing tour' })
       const chapters = this.parser.parse(run.raw)
       this.checkCoverage(ctx, chapters, isFinalAttempt)
       return { ok: true, value: { run, chapters } }
     } catch (e) {
-      return { ok: false, error: e as Error }
+      if (timedOut.fired) {
+        return {
+          ok: false,
+          isTimeout: true,
+          error: new Error(
+            `Tour generation timed out after ${Math.round(timeoutMs / 1000)}s (${ctx.files.length} files) — ` +
+              `set TOUR_ATTEMPT_TIMEOUT_MS to override.`,
+          ),
+        }
+      }
+      return { ok: false, isTimeout: false, error: e as Error }
+    } finally {
+      cleanup()
     }
   }
 

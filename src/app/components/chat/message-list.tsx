@@ -8,6 +8,7 @@ interface Props {
   streaming: boolean
   streamEvents: ChatStreamEvent[]
   onDeleteMessage: (id: number) => void
+  onPatchMermaid: (messageId: number, diagramIndex: number, source: string) => Promise<void>
   onJumpRef: (ref: CodeRef) => void
   onUseAsComment: (message: PrChatMessage) => void | Promise<void>
 }
@@ -17,6 +18,7 @@ export function MessageList({
   streaming,
   streamEvents,
   onDeleteMessage,
+  onPatchMermaid,
   onJumpRef,
   onUseAsComment,
 }: Props): JSX.Element {
@@ -41,6 +43,7 @@ export function MessageList({
             key={m.id}
             message={m}
             onDelete={onDeleteMessage}
+            onPatchMermaid={onPatchMermaid}
             onJumpRef={onJumpRef}
             onUseAsComment={onUseAsComment}
           />

@@ -1,6 +1,7 @@
 import { useMemo, type JSX } from 'react'
 import { match } from 'ts-pattern'
-import { useFileSnapshot } from '@/app/hooks/use-file-snapshot'
+import { useFileSnapshot, type SnapshotState } from '@/app/hooks/use-file-snapshot'
+import type { FileSnapshot } from '@/lib/api'
 import { useShiki } from '@/app/hooks/use-shiki'
 import { useResolvedBaseSha } from '@/app/hooks/use-resolved-base-sha'
 import { useDiffSurface } from '@/app/hooks/use-diff-surface'
@@ -91,6 +92,25 @@ export function DiffPane({
     return <Notice>Loading base…</Notice>
   }
 
+  // Files above BlobReader's 256 KB inline cap come back as `encoding:
+  // 'omitted'` with non-zero size (zero size = file genuinely missing). When
+  // BOTH sides are omitted-for-size or binary, the inline diff is meaningless
+  // — surface a clear notice with a GitHub fallback link instead of the
+  // generic "both revisions empty" message that yarn.lock-style files trigger.
+  const headBlocked = isInlineBlocked(headSnap)
+  const baseBlocked = baseSnap.kind === 'ready' && isInlineBlocked(baseSnap)
+  if (headBlocked && (baseBlocked || baseSnap.kind === 'error')) {
+    return (
+      <InlineUnavailable
+        repo={repo}
+        sha={headSha}
+        file={file}
+        headSize={headSnap.kind === 'ready' ? headSnap.snap.size : 0}
+        headEncoding={headSnap.kind === 'ready' ? headSnap.snap.encoding : 'omitted'}
+      />
+    )
+  }
+
   const headContent = headSnap.snap.encoding === 'utf8' ? (headSnap.snap.content ?? '') : ''
   // base might 404 (file added in this PR) — treat as empty so every line shows
   // up as an addition, which is the correct diff for a newly-introduced file.
@@ -177,7 +197,7 @@ function DiffBody({
   }
 
   if (rows.length === 0) {
-    return <Notice>Nothing to diff (both revisions are empty).</Notice>
+    return <Notice>Both revisions are empty — nothing to diff.</Notice>
   }
   const noChanges = rows.every((r) => r.kind === 'eq')
   const fileStatus: FileStatus = headMissing
@@ -205,4 +225,60 @@ function DiffBody({
       </div>
     </div>
   )
+}
+
+/**
+ * A snapshot is "inline-blocked" when its content can't render in the diff
+ * grid — either skipped by the 256 KB cap (`encoding: 'omitted'` with non-
+ * zero size, set by BlobReader) or binary (`base64`). Zero-size omitted
+ * means the file genuinely doesn't exist at that sha and is handled by the
+ * added/removed status path.
+ */
+function isInlineBlocked(state: SnapshotState): boolean {
+  if (state.kind !== 'ready') return false
+  const { encoding, size } = state.snap
+  if (encoding === 'base64') return true
+  if (encoding === 'omitted' && size > 0) return true
+  return false
+}
+
+function InlineUnavailable({
+  repo,
+  sha,
+  file,
+  headSize,
+  headEncoding,
+}: {
+  repo: string
+  sha: string
+  file: string
+  headSize: number
+  headEncoding: FileSnapshot['encoding']
+}): JSX.Element {
+  const url = `https://github.com/${repo}/blob/${sha}/${file}`
+  const reason =
+    headEncoding === 'base64'
+      ? 'Binary file — preview not supported inline.'
+      : `File too large to diff inline (${formatBytes(headSize)}).`
+  return (
+    <Notice>
+      <p>{reason}</p>
+      <p className="text-text-muted mt-2 text-[11px]">
+        Open on GitHub:{' '}
+        <button
+          type="button"
+          onClick={() => window.electron.openExternal(url)}
+          className="text-text-brand hover:underline"
+        >
+          {file}
+        </button>
+      </p>
+    </Notice>
+  )
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(2)} MB`
 }

@@ -129,6 +129,22 @@ export class ChatRouter extends Service {
       return c.json({ deleted: ok })
     })
 
+    // PATCH /messages/:id/diagrams/:index/mermaid → replace the mermaid source
+    // on one diagram inside a message. Backs the MermaidPane "Auto-fix" flow
+    // so repaired diagrams persist; reloading the chat shows the fix.
+    app.patch('/messages/:id/diagrams/:index/mermaid', async (c) => {
+      const id = numericParam(c.req.param('id'))
+      const indexRaw = Number(c.req.param('index'))
+      if (id == null || !Number.isInteger(indexRaw) || indexRaw < 0) {
+        return c.json({ error: 'invalid params' }, 400)
+      }
+      const body = await c.req.json<{ source?: string }>().catch((): { source?: string } => ({}))
+      if (!body.source?.trim()) return c.json({ error: 'source required' }, 400)
+      const updated = this.chats.patchMessageMermaid(id, indexRaw, body.source)
+      if (!updated) return c.json({ error: 'message or diagram not found' }, 404)
+      return c.json(updated)
+    })
+
     return app
   }
 }

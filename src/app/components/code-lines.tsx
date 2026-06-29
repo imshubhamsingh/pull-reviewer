@@ -9,6 +9,7 @@ import { DraftRow } from '@/app/components/draft-row'
 import { LineComposer } from '@/app/components/line-composer'
 import type { AskContext } from '@/app/components/ask-ai-panel'
 import { highlightTokens } from '@/app/lib/highlight-matches'
+import { useCodeContextMenu, type CodeContextTarget } from '@/app/hooks/use-code-context-menu'
 import type { LineMatchRange } from '@/app/lib/code-search'
 import type { AskStreamEvent, Finding, QaThread, ReviewDraft, SymbolLocation } from '@/lib/api'
 
@@ -80,6 +81,11 @@ interface Props {
   /** Index into `searchMatches` of the currently-active match — the one
    *  that should be flashed + scrolled into view. -1 / undefined disables. */
   searchActiveIndex?: number
+  /** Right-click handler — when set, a contextmenu on any rendered line
+   *  resolves to `(file, line, column, symbol)` and fires this. The host
+   *  opens its `ContextMenu` portal from the target. Leaves whitespace
+   *  clicks alone so the native menu still works there. */
+  onContextRequest?: (target: CodeContextTarget) => void
 }
 
 interface TokensPayload {
@@ -113,7 +119,9 @@ export function CodeLines(props: Props): JSX.Element {
     onSendToChat,
     searchMatches,
     searchActiveIndex,
+    onContextRequest,
   } = props
+  const ctxMenu = useCodeContextMenu({ file, onOpen: onContextRequest ?? noop })
   const containerRef = useRef<HTMLDivElement>(null)
   const focusSet = focusLines ?? EMPTY_FOCUS
   const commentableSet = commentableLines ?? EMPTY_FOCUS
@@ -195,6 +203,7 @@ export function CodeLines(props: Props): JSX.Element {
       ref={containerRef}
       className="shiki-block min-h-0 flex-1 overflow-auto text-xs"
       style={{ backgroundColor: payload.bg, color: payload.fg }}
+      onContextMenu={onContextRequest ? ctxMenu.onContextMenu : undefined}
     >
       <pre className="my-3">
         <code className="block">
@@ -475,3 +484,4 @@ const EMPTY_FOCUS = new Set<number>()
 const EMPTY_STRING_SET = new Set<string>()
 const EMPTY_AI_MAP = new Map<number, Finding[]>()
 const EMPTY_MATCHES: LineMatchRange[] = []
+const noop = (_target: CodeContextTarget): void => {}

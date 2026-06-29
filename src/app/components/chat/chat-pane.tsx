@@ -80,6 +80,7 @@ export function ChatPane({
           streaming={chat.streaming}
           streamEvents={chat.streamEvents}
           onDeleteMessage={chat.deleteMessage}
+          onPatchMermaid={chat.patchMermaid}
           onJumpRef={onJumpRef}
           onUseAsComment={onUseAsComment}
         />

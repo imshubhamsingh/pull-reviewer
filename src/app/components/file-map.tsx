@@ -216,10 +216,20 @@ function PathLabel({ path }: { path: string }): JSX.Element {
   const slash = path.lastIndexOf('/')
   const dir = slash >= 0 ? path.slice(0, slash + 1) : ''
   const name = slash >= 0 ? path.slice(slash + 1) : path
+  // Single truncating line — flips visual direction so the basename + extension
+  // stay visible and the ellipsis eats into the directory prefix instead. The
+  // `<bdi>` keeps the actual characters left-to-right; `direction: rtl` just
+  // controls where the overflow ellipsis lands.
   return (
-    <span className="flex min-w-0 flex-1 items-baseline font-mono">
-      {dir && <span className="text-text-muted truncate">{dir}</span>}
-      <span className="shrink-0">{name}</span>
+    <span
+      className="min-w-0 flex-1 truncate font-mono"
+      style={{ direction: 'rtl', textAlign: 'left' }}
+      title={path}
+    >
+      <bdi style={{ direction: 'ltr' }}>
+        {dir && <span className="text-text-muted">{dir}</span>}
+        {name}
+      </bdi>
     </span>
   )
 }

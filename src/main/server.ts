@@ -35,6 +35,7 @@ export function startApiServer(services: Services): Promise<RunningServer> {
   app.route('/api/chats', services.routers.chats.routes())
   app.route('/api/settings', services.routers.settings.routes())
   app.route('/api/review-progress', services.routers.reviewProgress.routes())
+  app.route('/api/usages', services.routers.usages.routes())
 
   return new Promise((resolve) => {
     // Bind to 127.0.0.1 explicitly. `localhost` can resolve to ::1 (IPv6) on

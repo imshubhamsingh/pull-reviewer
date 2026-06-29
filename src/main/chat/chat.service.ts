@@ -81,6 +81,29 @@ export class ChatService extends Service {
     return this.chats.deleteMessage(id)
   }
 
+  /**
+   * Patch the `mermaid` source on a single diagram inside an existing message.
+   * Used by the MermaidPane auto-fix flow so a repaired diagram persists
+   * across reloads (the chat row's `diagrams_json` gets the corrected source).
+   * Returns the updated message, or undefined when the message / diagram /
+   * mermaid field doesn't exist.
+   */
+  patchMessageMermaid(
+    messageId: number,
+    diagramIndex: number,
+    source: string,
+  ): PrChatMessageRecord | undefined {
+    const msg = this.chats.findMessage(messageId)
+    if (!msg || !msg.diagrams) return undefined
+    if (diagramIndex < 0 || diagramIndex >= msg.diagrams.length) return undefined
+    const current = msg.diagrams[diagramIndex]
+    if (!current || !('mermaid' in current)) return undefined
+    const updatedDiagrams = msg.diagrams.map((d, i) =>
+      i === diagramIndex ? { ...current, mermaid: source } : d,
+    )
+    return this.chats.updateMessage(messageId, { diagrams: updatedDiagrams })
+  }
+
   // -------- The send turn ---------
 
   async send(input: SendChatInput): Promise<SendChatResult> {

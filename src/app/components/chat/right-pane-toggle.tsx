@@ -1,9 +1,9 @@
-import { FileText, MessageSquare, Sparkles } from 'lucide-react'
+import { FileText, MessageSquare, Search, Sparkles } from 'lucide-react'
 import { match } from 'ts-pattern'
 import type { JSX, ReactNode } from 'react'
 import { cn } from '@/app/lib/utils'
 
-export type RightPaneMode = 'map' | 'chat' | 'review'
+export type RightPaneMode = 'map' | 'chat' | 'review' | 'usages'
 
 interface Props {
   mode: RightPaneMode
@@ -28,6 +28,10 @@ export function RightPaneToggle({ mode, onChange }: Props): JSX.Element {
         <MessageSquare size={ICON_SIZE} aria-hidden />
         Chat
       </ToggleButton>
+      <ToggleButton mode="usages" current={mode} onClick={() => onChange('usages')}>
+        <Search size={ICON_SIZE} aria-hidden />
+        Usages
+      </ToggleButton>
     </div>
   )
 }
@@ -45,6 +49,7 @@ function ToggleButton({ mode, current, onClick, children }: ToggleButtonProps): 
     .with('map', () => 'Show file map')
     .with('review', () => 'Show AI review')
     .with('chat', () => 'Show PR chat')
+    .with('usages', () => 'Show usages results')
     .exhaustive()
   return (
     <button

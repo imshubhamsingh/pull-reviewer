@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import { cn } from '@/app/lib/utils'
 import { useCanvasTransform, type CanvasController } from '@/app/hooks/use-canvas-transform'
 import { sanitizeMermaid } from '@/app/components/mermaid-sanitize'
+import { api } from '@/lib/api'
 import type { TourStep } from '@/lib/api'
 
 mermaid.initialize({
@@ -15,12 +16,19 @@ mermaid.initialize({
 
 interface Props {
   step: TourStep
+  /** Optional persistence hook — called with the repaired mermaid source
+   *  after the auto-fix endpoint succeeds. Chat hosts use this to write the
+   *  fix back to `pr_chat_messages.diagrams_json` so the repair survives
+   *  reload; tour hosts omit it (in-memory patch only). */
+  onRepaired?: (newSource: string) => Promise<void>
 }
 
 type RenderState =
   | { kind: 'idle' }
   | { kind: 'ok'; svg: string }
   | { kind: 'error'; message: string }
+
+type RepairState = { kind: 'idle' } | { kind: 'pending' } | { kind: 'failed'; message: string }
 
 interface NaturalSize {
   width: number
@@ -30,16 +38,22 @@ interface NaturalSize {
 const FIT_PADDING = 48
 const ZOOM_STEP = 1.25
 
-export function MermaidPane({ step }: Props): JSX.Element {
+export function MermaidPane({ step, onRepaired }: Props): JSX.Element {
   const [state, setState] = useState<RenderState>({ kind: 'idle' })
   const [natural, setNatural] = useState<NaturalSize | undefined>()
+  // When the LLM emits broken Mermaid, the "Auto-fix" button asks a cheap
+  // model to repair it and stashes the result here. Re-renders trigger via
+  // the source-dependent render effect below.
+  const [patchedSource, setPatchedSource] = useState<string | null>(null)
+  const [repair, setRepair] = useState<RepairState>({ kind: 'idle' })
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const canvas = useCanvasTransform()
   const [dragging, setDragging] = useState(false)
   const fittedForRef = useRef<string | null>(null)
   const id = `mermaid-${step.id}`
-  const source = step.diagram && 'mermaid' in step.diagram ? step.diagram.mermaid : undefined
+  const original = step.diagram && 'mermaid' in step.diagram ? step.diagram.mermaid : undefined
+  const source = patchedSource ?? original
 
   useEffect(() => {
     let cancelled = false
@@ -149,6 +163,36 @@ export function MermaidPane({ step }: Props): JSX.Element {
 
   const captionHtml = useMemo(() => marked.parse(step.body, { async: false }), [step.body])
 
+  // Ask the backend repair endpoint to fix the broken Mermaid source. The
+  // returned source is patched in locally so the next render uses the fix;
+  // when an `onRepaired` callback is provided the caller persists the fix
+  // upstream (e.g. chat's `diagrams_json`) so it also survives reload.
+  const handleAutoFix = useCallback(async () => {
+    if (!source || state.kind !== 'error') return
+    setRepair({ kind: 'pending' })
+    try {
+      const { source: fixed } = await api.tours.repairMermaid({
+        source,
+        error: state.message,
+      })
+      if (fixed.trim() === source.trim()) {
+        setRepair({ kind: 'failed', message: 'Repair returned an identical source.' })
+        return
+      }
+      setPatchedSource(fixed)
+      setRepair({ kind: 'idle' })
+      if (onRepaired) {
+        await onRepaired(fixed).catch((err: Error) => {
+          // Local patch already applied — surface the persistence failure
+          // without rolling the diagram back to the broken source.
+          setRepair({ kind: 'failed', message: `Saved locally, persist failed: ${err.message}` })
+        })
+      }
+    } catch (err) {
+      setRepair({ kind: 'failed', message: (err as Error).message })
+    }
+  }, [source, state, onRepaired])
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex-1">
@@ -160,7 +204,7 @@ export function MermaidPane({ step }: Props): JSX.Element {
             dragging ? 'cursor-grabbing' : state.kind === 'ok' ? 'cursor-grab' : 'cursor-default',
           )}
         >
-          {renderBody(state, source, canvas, natural, contentRef)}
+          {renderBody(state, source, canvas, natural, contentRef, repair, handleAutoFix)}
         </div>
         {state.kind === 'ok' && (
           <ZoomControls canvas={canvas} onFit={fit} containerRef={containerRef} />
@@ -184,6 +228,8 @@ function renderBody(
   canvas: CanvasController,
   natural: NaturalSize | undefined,
   contentRef: React.RefObject<HTMLDivElement | null>,
+  repair: RepairState,
+  onAutoFix: () => void,
 ): JSX.Element {
   if (state.kind === 'idle')
     return (
@@ -192,12 +238,7 @@ function renderBody(
       </p>
     )
   if (state.kind === 'error') {
-    return (
-      <pre className="text-text-danger bg-surface m-4 w-fit max-w-full overflow-auto rounded-md p-3 text-xs">
-        Bad mermaid: {state.message}
-        {source && `\n\n${source}`}
-      </pre>
-    )
+    return <MermaidErrorPane state={state} source={source} repair={repair} onAutoFix={onAutoFix} />
   }
   const { x, y, scale } = canvas.transform
   // Wrapper size = natural * scale → SVG re-renders at this size as vector.
@@ -222,6 +263,46 @@ function renderBody(
         className="diagram-svg"
         dangerouslySetInnerHTML={{ __html: state.svg }}
       />
+    </div>
+  )
+}
+
+/**
+ * Error pane shown when Mermaid fails to parse the source. Adds an
+ * "Auto-fix syntax" button that asks the backend repair endpoint to clean
+ * the source — local + (optionally) persisted via the host's onRepaired hook.
+ */
+function MermaidErrorPane({
+  state,
+  source,
+  repair,
+  onAutoFix,
+}: {
+  state: { kind: 'error'; message: string }
+  source: string | undefined
+  repair: RepairState
+  onAutoFix: () => void
+}): JSX.Element {
+  const busy = repair.kind === 'pending'
+  return (
+    <div className="m-4 flex w-fit max-w-full flex-col gap-2">
+      <pre className="text-text-danger bg-surface overflow-auto rounded-md p-3 text-xs">
+        Bad mermaid: {state.message}
+        {source && `\n\n${source}`}
+      </pre>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onAutoFix}
+          disabled={busy}
+          className="bg-interactive-primary hover:bg-interactive-primary-hover text-interactive-primary-fg rounded-sm px-3 py-1 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-70"
+        >
+          {busy ? 'Repairing…' : 'Auto-fix syntax'}
+        </button>
+        {repair.kind === 'failed' && (
+          <span className="text-text-danger/80 text-[11px]">{repair.message}</span>
+        )}
+      </div>
     </div>
   )
 }

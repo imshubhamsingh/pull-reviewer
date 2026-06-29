@@ -20,9 +20,19 @@ interface Props {
   index: number
   messageId: number
   onJumpRef?: (ref: CodeRef) => void
+  /** Called after the MermaidPane auto-fix endpoint returns a repaired source.
+   *  Wired to use-chats.patchMermaid so the new source persists in the chat
+   *  message row and survives reload. Undefined for non-chat hosts. */
+  onRepaired?: (newSource: string) => Promise<void>
 }
 
-export function ChatDiagram({ diagram, index, messageId, onJumpRef }: Props): JSX.Element {
+export function ChatDiagram({
+  diagram,
+  index,
+  messageId,
+  onJumpRef,
+  onRepaired,
+}: Props): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const onJumpSource: JumpSource | undefined = onJumpRef
     ? (ref) => onJumpRef({ file: ref.file, lineStart: ref.lineStart, lineEnd: ref.lineEnd })
@@ -47,6 +57,7 @@ export function ChatDiagram({ diagram, index, messageId, onJumpRef }: Props): JS
           index={index}
           messageId={messageId}
           onJumpSource={onJumpSource}
+          onRepaired={onRepaired}
         />
       </div>
       {expanded && (
@@ -55,6 +66,7 @@ export function ChatDiagram({ diagram, index, messageId, onJumpRef }: Props): JS
           index={index}
           messageId={messageId}
           onJumpSource={onJumpSource}
+          onRepaired={onRepaired}
           onClose={() => setExpanded(false)}
         />
       )}
@@ -67,11 +79,13 @@ function DiagramRenderer({
   index,
   messageId,
   onJumpSource,
+  onRepaired,
 }: {
   diagram: Diagram
   index: number
   messageId: number
   onJumpSource: JumpSource | undefined
+  onRepaired: ((newSource: string) => Promise<void>) | undefined
 }): JSX.Element {
   const step = syntheticStep(diagram, index, messageId)
   return match(diagram)
@@ -81,7 +95,7 @@ function DiagramRenderer({
     .with({ kind: 'state' }, ({ machine }) => (
       <StateDiagramPane step={step} machine={machine} onJumpSource={onJumpSource} />
     ))
-    .otherwise(() => <MermaidPane step={step} />)
+    .otherwise(() => <MermaidPane step={step} onRepaired={onRepaired} />)
 }
 
 function DiagramExpandModal({
@@ -89,12 +103,14 @@ function DiagramExpandModal({
   index,
   messageId,
   onJumpSource,
+  onRepaired,
   onClose,
 }: {
   diagram: Diagram
   index: number
   messageId: number
   onJumpSource: JumpSource | undefined
+  onRepaired: ((newSource: string) => Promise<void>) | undefined
   onClose: () => void
 }): JSX.Element {
   // ESC closes, click on backdrop closes, click inside the dialog ignores.
@@ -132,6 +148,7 @@ function DiagramExpandModal({
             index={index}
             messageId={messageId}
             onJumpSource={onJumpSource}
+            onRepaired={onRepaired}
           />
         </div>
       </div>

@@ -17,6 +17,12 @@ export interface ChatsState {
   rename: (id: number, title: string) => Promise<void>
   deleteChat: (id: number) => Promise<void>
   deleteMessage: (id: number) => Promise<void>
+  /**
+   * Replace the mermaid source on one diagram inside a message after an
+   * auto-fix repair. Persists via PATCH and merges the returned row into
+   * local state so other panes see the fix without a refresh.
+   */
+  patchMermaid: (messageId: number, diagramIndex: number, source: string) => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -110,6 +116,14 @@ export function useChats(repo: string, prNumber: number): ChatsState {
     await api.chats.removeMessage(id)
     setMessages((prev) => prev.filter((m) => m.id !== id))
   }, [])
+
+  const patchMermaid = useCallback(
+    async (messageId: number, diagramIndex: number, source: string) => {
+      const updated = await api.chats.patchMessageMermaid(messageId, diagramIndex, source)
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)))
+    },
+    [],
+  )
 
   // -------- send + cancel ---------
 
@@ -264,6 +278,7 @@ export function useChats(repo: string, prNumber: number): ChatsState {
     rename,
     deleteChat,
     deleteMessage,
+    patchMermaid,
     refresh,
   }
 }
